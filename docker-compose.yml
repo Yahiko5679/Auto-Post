@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  bot:
+    build: .
+    container_name: autopost_bot
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - mongo
+      - redis
+    volumes:
+      - ./assets:/app/assets
+      - ./temp:/app/temp
+
+  mongo:
+    image: mongo:7
+    container_name: autopost_mongo
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: autopost_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+volumes:
+  mongo_data:
+  redis_data:

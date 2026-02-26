@@ -1,0 +1,111 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# render.yaml — Render.com Infrastructure as Code
+# Deploy: https://dashboard.render.com → New → Blueprint → link this repo
+# Docs:   https://render.com/docs/blueprint-spec
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ── Main Bot Web Service (webhook receiver) ──────────────────────────────────
+  - type: web
+    name: autopost-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    # Render Free tier: use "starter" for paid plans with always-on
+    plan: starter
+
+    # Health check endpoint (must return 200)
+    healthCheckPath: /health
+
+    # Auto-deploy on every git push to main
+    autoDeploy: true
+    branch: main
+
+    # ── Environment Variables ──────────────────────────────────────────────────
+    # Set secret values in Render Dashboard → Environment
+    # Non-secret defaults can be hardcoded here
+    envVars:
+      # ── Required: set in Render Dashboard ────────────────────────────────────
+      - key: BOT_TOKEN
+        sync: false            # must be set manually in dashboard (secret)
+
+      - key: TMDB_API_KEY
+        sync: false
+
+      - key: IMDB_API_KEY
+        sync: false            # RapidAPI IMDb key (optional, enhances data)
+
+      - key: ADMIN_IDS
+        sync: false            # comma-separated Telegram user IDs
+
+      - key: MONGO_URI
+        sync: false            # MongoDB Atlas connection string
+
+      - key: BOT_USERNAME
+        sync: false            # without @ symbol
+
+      # ── Auto-injected by Render ───────────────────────────────────────────────
+      - key: PORT
+        generateValue: false   # Render sets this automatically
+
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: autopost-bot
+          property: host       # resolves to https://autopost-bot.onrender.com
+
+      # ── Optional: Redis for FSM state ────────────────────────────────────────
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: autopost-redis
+          property: connectionString
+
+      # ── App config (safe to hardcode) ────────────────────────────────────────
+      - key: MODE
+        value: webhook          # "webhook" for Render, "polling" for local dev
+
+      - key: WEBHOOK_PATH
+        value: /webhook
+
+      - key: LOG_LEVEL
+        value: INFO
+
+      - key: FREE_POSTS_PER_DAY
+        value: "10"
+
+      - key: PREMIUM_POSTS_PER_DAY
+        value: "999"
+
+      - key: MAX_SEARCH_RESULTS
+        value: "5"
+
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+      - key: PYTHONDONTWRITEBYTECODE
+        value: "1"
+
+  # ── Redis (FSM state storage) ─────────────────────────────────────────────────
+  - type: redis
+    name: autopost-redis
+    plan: free                  # 25 MB free tier — enough for FSM states
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []             # allow all internal Render traffic
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NOTES:
+# 1. MongoDB: Use MongoDB Atlas free tier (512 MB). Not available as a
+#    Render-managed service. Set MONGO_URI in Dashboard from Atlas.
+#
+# 2. Free tier web services on Render spin down after 15 min of inactivity.
+#    Upgrade to "starter" ($7/mo) for always-on. Telegram webhooks will
+#    automatically wake the service on incoming messages.
+#
+# 3. After first deploy, Telegram webhook is auto-registered by webserver.py
+#    on startup using: https://<your-service>.onrender.com/webhook
+#
+# 4. IMDB_API_KEY: Get from https://rapidapi.com/apidojo/api/imdb8
+#    It's optional — bot works without it, falls back to TMDb data only.
+# ─────────────────────────────────────────────────────────────────────────────

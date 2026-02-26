@@ -1,0 +1,20 @@
+# AutoPost Bot — Python Dependencies
+
+# Telegram Bot Framework (includes webhooks extra for aiohttp)
+python-telegram-bot[webhooks]==21.5
+
+# Async HTTP client (API calls + webhook server)
+aiohttp==3.9.5
+
+# Database — async MongoDB
+motor==3.5.0
+pymongo==4.8.0
+
+# FSM State — Redis async client
+redis==5.0.8
+
+# Image Processing
+Pillow==10.4.0
+
+# Environment variable loading
+python-dotenv==1.0.1

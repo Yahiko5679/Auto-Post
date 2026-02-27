@@ -11,14 +11,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Bot Credentials ────────────────────────────────────────────────────────────
-BOT_TOKEN    = os.getenv("BOT_TOKEN",    "YOUR_BOT_TOKEN_HERE")
-BOT_USERNAME = os.getenv("BOT_USERNAME", "YourBotUsername")
+BOT_TOKEN    = os.getenv("BOT_TOKEN",    "")
+BOT_USERNAME = os.getenv("BOT_USERNAME", "")
 
 # ── Admin IDs (comma-separated Telegram user IDs) ─────────────────────────────
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "123456789").split(",") if x.strip()]
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 
 # ── TMDb ──────────────────────────────────────────────────────────────────────
-TMDB_API_KEY   = os.getenv("TMDB_API_KEY",   "YOUR_TMDB_API_KEY")
+TMDB_API_KEY   = os.getenv("TMDB_API_KEY",   "")
 TMDB_BASE_URL  = "https://api.themoviedb.org/3"
 TMDB_IMAGE_URL = "https://image.tmdb.org/t/p/w500"
 
@@ -35,14 +35,14 @@ JIKAN_BASE_URL = "https://api.jikan.moe/v4"
 ANILIST_URL = "https://graphql.anilist.co"
 
 # ── MongoDB ────────────────────────────────────────────────────────────────────
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+MONGO_URI = os.getenv("MONGO_URI", "")
 DB_NAME   = "autopost_bot"
 
 # ── Redis (FSM state) — falls back to in-memory if not set ────────────────────
 REDIS_URL = os.getenv("REDIS_URL", "")
 
 # ── Webhook / Server (Render) ─────────────────────────────────────────────────
-MODE         = os.getenv("MODE", "polling")       # "webhook" | "polling"
+MODE         = os.getenv("MODE", "")       # "webhook" | "polling"
 PORT         = int(os.getenv("PORT", 8080))
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
 # Auto-built from RENDER_EXTERNAL_URL in webserver.py

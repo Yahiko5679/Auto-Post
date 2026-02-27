@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-from database.db import upsert_user, get_user, total_users, total_posts
+from database.db import CosmicBotz
 from utils.helpers import track_user
 
 
@@ -70,7 +70,7 @@ class StartHandler:
         await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
     async def stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = await get_user(update.effective_user.id)
+        user = await CosmicBotz.get_user(update.effective_user.id)
         if not user:
             await update.message.reply_text("No stats yet. Start generating posts!")
             return

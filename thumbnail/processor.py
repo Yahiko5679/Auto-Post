@@ -1,196 +1,122 @@
 """
 Thumbnail Processor
-- Downloads poster from URL
-- Applies watermark text overlay
-- Composites custom user image
-- Outputs final PIL Image as bytes
+Builds 1280x720 JPEG cards from poster + backdrop images.
 """
-
 import io
 import os
 import logging
 import aiohttp
-import asyncio
-from typing import Optional, Tuple
+from typing import Optional
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 
 logger = logging.getLogger(__name__)
 
-FONT_PATH = "assets/fonts/DejaVuSans-Bold.ttf"
-FALLBACK_FONT_SIZE = 28
-THUMBNAIL_SIZE = (1280, 720)  # 16:9 output
-POSTER_CROP_RATIO = (2, 3)
+_FONT_PATH  = "assets/fonts/DejaVuSans-Bold.ttf"
+_SIZE       = (1280, 720)
 
 
-async def download_image(url: str) -> Optional[Image.Image]:
-    """Download an image from URL and return PIL Image."""
+async def _fetch(url: str) -> Optional[Image.Image]:
     try:
         async with aiohttp.ClientSession() as s:
             async with s.get(url, timeout=aiohttp.ClientTimeout(total=15)) as r:
                 if r.status == 200:
-                    data = await r.read()
-                    return Image.open(io.BytesIO(data)).convert("RGBA")
+                    return Image.open(io.BytesIO(await r.read())).convert("RGBA")
     except Exception as e:
-        logger.error(f"Image download failed: {e}")
+        logger.error(f"Image fetch failed: {e}")
     return None
 
 
-def _load_font(size: int) -> ImageFont.FreeTypeFont:
+def _font(size: int) -> ImageFont.FreeTypeFont:
     try:
-        return ImageFont.truetype(FONT_PATH, size)
+        return ImageFont.truetype(_FONT_PATH, size)
     except Exception:
         return ImageFont.load_default()
 
 
-def _add_watermark(img: Image.Image, text: str) -> Image.Image:
-    """Add semi-transparent watermark text to bottom-right corner."""
+def _watermark(img: Image.Image, text: str) -> Image.Image:
     if not text:
         return img
-    draw = ImageDraw.Draw(img.copy())
-    font = _load_font(26)
-    w, h = img.size
-
-    # Measure text
-    bbox = draw.textbbox((0, 0), text, font=font)
+    draw  = ImageDraw.Draw(img)
+    font  = _font(26)
+    W, H  = img.size
+    bbox  = draw.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-
-    # Watermark background pill
-    margin = 14
-    x = w - tw - margin * 2 - 10
-    y = h - th - margin * 2 - 10
-
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    od = ImageDraw.Draw(overlay)
-    od.rounded_rectangle(
-        [x, y, x + tw + margin * 2, y + th + margin * 2],
-        radius=8,
-        fill=(0, 0, 0, 160),
-    )
-    od.text((x + margin, y + margin), text, font=font, fill=(255, 255, 255, 230))
-
-    result = Image.alpha_composite(img, overlay)
-    return result
+    m  = 14
+    x  = W - tw - m * 2 - 10
+    y  = H - th - m * 2 - 10
+    ov = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    od = ImageDraw.Draw(ov)
+    od.rounded_rectangle([x, y, x + tw + m*2, y + th + m*2], radius=8, fill=(0, 0, 0, 160))
+    od.text((x + m, y + m), text, font=font, fill=(255, 255, 255, 230))
+    return Image.alpha_composite(img, ov)
 
 
-def _create_banner_card(
-    poster: Image.Image,
-    banner: Optional[Image.Image],
-    watermark: str = "",
-) -> Image.Image:
-    """
-    Create a 1280×720 thumbnail card:
-    - Blurred banner/backdrop as background
-    - Poster (portrait) on left
-    - Right side empty (for caption overlay or channel branding)
-    """
-    W, H = THUMBNAIL_SIZE
+def _build_card(poster: Image.Image, backdrop: Optional[Image.Image], watermark: str) -> Image.Image:
+    W, H = _SIZE
     canvas = Image.new("RGBA", (W, H), (15, 15, 20, 255))
 
-    # Background: blurred banner or stretched poster
-    if banner:
-        bg = banner.convert("RGBA").resize((W, H), Image.LANCZOS)
-    else:
-        bg = poster.convert("RGBA").resize((W, H), Image.LANCZOS)
-
-    bg = bg.filter(ImageFilter.GaussianBlur(radius=18))
-    bg = ImageEnhance.Brightness(bg).enhance(0.45)
+    # Background: blurred backdrop or poster
+    bg = (backdrop or poster).convert("RGBA").resize((W, H), Image.LANCZOS)
+    bg = ImageEnhance.Brightness(bg.filter(ImageFilter.GaussianBlur(18))).enhance(0.45)
     canvas.paste(bg, (0, 0))
 
-    # Dark gradient overlay (left side lighter)
-    gradient = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    gd = ImageDraw.Draw(gradient)
+    # Gradient overlay
+    grad = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gd   = ImageDraw.Draw(grad)
     for i in range(W):
-        alpha = int(80 + (i / W) * 120)
-        gd.line([(i, 0), (i, H)], fill=(0, 0, 0, alpha))
-    canvas = Image.alpha_composite(canvas, gradient)
+        gd.line([(i, 0), (i, H)], fill=(0, 0, 0, int(80 + (i / W) * 120)))
+    canvas = Image.alpha_composite(canvas, grad)
 
-    # Poster card
-    poster_h = int(H * 0.82)
-    poster_w = int(poster_h * 2 / 3)
-    poster_x = 60
-    poster_y = (H - poster_h) // 2
+    # Poster
+    ph = int(H * 0.82)
+    pw = int(ph * 2 / 3)
+    px, py = 60, (H - ph) // 2
+    pr = poster.convert("RGBA").resize((pw, ph), Image.LANCZOS)
 
-    poster_resized = poster.convert("RGBA").resize((poster_w, poster_h), Image.LANCZOS)
+    # Shadow
+    sh = Image.new("RGBA", (pw + 20, ph + 20), (0, 0, 0, 0))
+    sb = Image.new("RGBA", (pw + 20, ph + 20), (0, 0, 0, 180))
+    canvas.paste(sb.filter(ImageFilter.GaussianBlur(10)), (px - 5, py + 5), sb.filter(ImageFilter.GaussianBlur(10)))
 
-    # Drop shadow
-    shadow = Image.new("RGBA", (poster_w + 20, poster_h + 20), (0, 0, 0, 0))
-    shadow_bg = Image.new("RGBA", (poster_w + 20, poster_h + 20), (0, 0, 0, 180))
-    shadow_bg = shadow_bg.filter(ImageFilter.GaussianBlur(radius=10))
-    canvas.paste(shadow_bg, (poster_x - 5, poster_y + 5), shadow_bg)
+    # Rounded poster
+    mask = Image.new("L", (pw, ph), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, pw, ph], radius=12, fill=255)
+    canvas.paste(pr, (px, py), mask)
 
-    # Rounded corners on poster
-    mask = Image.new("L", (poster_w, poster_h), 0)
-    md = ImageDraw.Draw(mask)
-    md.rounded_rectangle([0, 0, poster_w, poster_h], radius=12, fill=255)
-    canvas.paste(poster_resized, (poster_x, poster_y), mask)
-
-    # Thin accent line
-    accent = ImageDraw.Draw(canvas)
-    accent.line(
-        [(poster_x + poster_w + 20, poster_y + 10),
-         (poster_x + poster_w + 20, poster_y + poster_h - 10)],
-        fill=(255, 200, 50, 180), width=3
+    # Accent line
+    ImageDraw.Draw(canvas).line(
+        [(px + pw + 20, py + 10), (px + pw + 20, py + ph - 10)],
+        fill=(255, 200, 50, 180), width=3,
     )
 
-    # Watermark
-    if watermark:
-        canvas = _add_watermark(canvas, watermark)
-
-    return canvas.convert("RGB")
+    return _watermark(canvas, watermark).convert("RGB")
 
 
 async def build_thumbnail(
     poster_url: Optional[str],
     backdrop_url: Optional[str] = None,
     watermark: str = "",
-    custom_image: Optional[bytes] = None,
 ) -> bytes:
-    """
-    Build final thumbnail and return as JPEG bytes.
-    If custom_image is provided, use it as poster.
-    """
+    """Download images and build a 1280x720 card. Returns JPEG bytes."""
     os.makedirs("temp", exist_ok=True)
 
-    # Poster source
-    if custom_image:
-        poster = Image.open(io.BytesIO(custom_image)).convert("RGBA")
-    elif poster_url:
-        poster = await download_image(poster_url)
-    else:
-        poster = None
-
+    poster = (await _fetch(poster_url)) if poster_url else None
     if poster is None:
-        # Fallback: solid colored card
         poster = Image.new("RGBA", (400, 600), (30, 30, 40, 255))
-        d = ImageDraw.Draw(poster)
-        d.text((20, 280), "No Image", fill=(200, 200, 200, 255), font=_load_font(24))
+        ImageDraw.Draw(poster).text((20, 280), "No Image", fill=(200, 200, 200), font=_font(24))
 
-    # Backdrop
-    backdrop = None
-    if backdrop_url:
-        backdrop = await download_image(backdrop_url)
+    backdrop = (await _fetch(backdrop_url)) if backdrop_url else None
+    card = _build_card(poster, backdrop, watermark)
 
-    canvas = _create_banner_card(poster, backdrop, watermark)
-
-    # Encode to JPEG bytes
     buf = io.BytesIO()
-    canvas.save(buf, format="JPEG", quality=92, optimize=True)
+    card.save(buf, format="JPEG", quality=92, optimize=True)
     return buf.getvalue()
 
 
-async def process_custom_thumbnail(
-    photo_bytes: bytes,
-    watermark: str = "",
-) -> bytes:
-    """
-    Process a user-uploaded custom thumbnail.
-    Resize to 1280×720 and apply watermark if set.
-    """
-    img = Image.open(io.BytesIO(photo_bytes)).convert("RGBA")
-    img = img.resize(THUMBNAIL_SIZE, Image.LANCZOS)
-    if watermark:
-        img = _add_watermark(img, watermark)
-    img = img.convert("RGB")
+async def process_custom_thumbnail(photo_bytes: bytes, watermark: str = "") -> bytes:
+    """Resize user-uploaded photo to 1280x720 and apply watermark."""
+    img = Image.open(io.BytesIO(photo_bytes)).convert("RGBA").resize(_SIZE, Image.LANCZOS)
+    img = _watermark(img, watermark).convert("RGB")
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=92, optimize=True)
     return buf.getvalue()

@@ -7,7 +7,7 @@ import logging
 from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
-from database.db import upsert_user, is_banned, can_post_today, increment_post_count
+from database.db import CosmicBotz
 from config import ADMIN_IDS
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ def require_not_banned(func):
         user = update.effective_user
         if not user:
             return
-        if await is_banned(user.id):
+        if await CosmicBotz.is_banned(user.id):
             await update.effective_message.reply_text(
                 "🚫 You have been banned from using this bot."
             )
@@ -47,7 +47,7 @@ def track_user(func):
     async def wrapper(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user = update.effective_user
         if user:
-            await upsert_user(user.id, user.username or "", user.full_name or "")
+            await CosmicBotz.upsert_user(user.id, user.username or "", user.full_name or "")
         return await func(self, update, context, *args, **kwargs)
     return wrapper
 
@@ -57,7 +57,7 @@ def check_daily_limit(func):
     @functools.wraps(func)
     async def wrapper(self, update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user = update.effective_user
-        if user and not await can_post_today(user.id):
+        if user and not await CosmicBotz.can_post_today(user.id):
             await update.effective_message.reply_text(
                 "⚠️ You've reached your daily post limit.\n"
                 "Upgrade to ⭐ Premium for unlimited posts!"

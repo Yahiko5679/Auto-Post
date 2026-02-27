@@ -11,7 +11,7 @@ Features:
   • Auto-registers webhook URL with Telegram on startup
   • Graceful shutdown with proper cleanup
 """
-
+"""
 import os
 import sys
 import logging
@@ -303,3 +303,5 @@ if __name__ == "__main__":
             asyncio.run(run_webhook())
         except KeyboardInterrupt:
             logger.info("Stopped by user.")
+
+            """

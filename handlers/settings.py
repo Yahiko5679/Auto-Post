@@ -7,7 +7,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-from database.db import get_user_settings, update_user_settings, get_user
+from database.db import CosmicBotz
 from fsm.state_manager import StateManager
 from utils.keyboards import settings_main_kb, quality_kb, audio_kb
 from utils.helpers import safe_edit, safe_answer, track_user, require_not_banned
@@ -23,8 +23,8 @@ class SettingsHandler:
     @track_user
     async def menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
-        settings = await get_user_settings(user_id)
-        user = await get_user(user_id)
+        settings = await CosmicBotz.get_user_settings(user_id)
+        user = await CosmicBotz.get_user(user_id)
         premium = "⭐ Premium" if user and user.get("is_premium") else "Free"
 
         text = (
@@ -74,13 +74,13 @@ class SettingsHandler:
 
         elif data.startswith("settings_setquality_"):
             val = data[len("settings_setquality_"):]
-            await update_user_settings(user_id, {"quality": val})
+            await CosmicBotz.update_user_settings(user_id, {"quality": val})
             await safe_answer(query, f"✅ Quality set to: {val}", alert=True)
             await safe_edit(query.message, "⚙️ Settings updated!", reply_markup=settings_main_kb())
 
         elif data.startswith("settings_setaudio_"):
             val = data[len("settings_setaudio_"):]
-            await update_user_settings(user_id, {"audio": val})
+            await CosmicBotz.update_user_settings(user_id, {"audio": val})
             await safe_answer(query, f"✅ Audio set to: {val}", alert=True)
             await safe_edit(query.message, "⚙️ Settings updated!", reply_markup=settings_main_kb())
 
@@ -89,7 +89,7 @@ class SettingsHandler:
             await TemplateHandler().list_templates(update, context)
 
         elif data == "settings_stats":
-            user = await get_user(user_id)
+            user = await CosmicBotz.get_user(user_id)
             posts = user.get("post_count", 0) if user else 0
             premium = "⭐ Yes" if user and user.get("is_premium") else "No"
             await safe_edit(
@@ -128,10 +128,10 @@ class SettingsHandler:
         user_id = update.effective_user.id
         text = update.message.text.strip()
         if text.lower() == "clear":
-            await update_user_settings(user_id, {"watermark": ""})
+            await CosmicBotz.update_user_settings(user_id, {"watermark": ""})
             await update.message.reply_text("✅ Watermark cleared.")
         else:
-            await update_user_settings(user_id, {"watermark": text})
+            await CosmicBotz.update_user_settings(user_id, {"watermark": text})
             await update.message.reply_text(
                 f"✅ Watermark set to: <code>{text}</code>", parse_mode=ParseMode.HTML
             )
@@ -147,7 +147,7 @@ class SettingsHandler:
                 parse_mode=ParseMode.HTML,
             )
             return
-        await update_user_settings(user_id, {"channel_id": text})
+        await CosmicBotz.update_user_settings(user_id, {"channel_id": text})
         await update.message.reply_text(
             f"✅ Channel set to <code>{text}</code>.\n"
             f"Ensure this bot is an admin there!",

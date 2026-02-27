@@ -8,10 +8,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-from database.db import (
-    save_template, get_template, list_user_templates,
-    delete_template, update_user_settings, get_user_settings
-)
+from database.db import CosmicBotz
 from fsm.state_manager import StateManager
 from formatter.engine import FormatEngine
 from utils.helpers import safe_edit, safe_answer, track_user, require_not_banned
@@ -28,8 +25,8 @@ class TemplateHandler:
     @track_user
     async def list_templates(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
-        templates = await list_user_templates(user_id)
-        settings = await get_user_settings(user_id)
+        templates = await CosmicBotz.list_user_templates(user_id)
+        settings = await CosmicBotz.get_user_settings(user_id)
         active = settings.get("active_template", "default")
 
         if not templates:
@@ -61,7 +58,7 @@ class TemplateHandler:
     @require_not_banned
     async def my_format(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
-        settings = await get_user_settings(user_id)
+        settings = await CosmicBotz.get_user_settings(user_id)
         active_name = settings.get("active_template", "default")
 
         if active_name == "default":
@@ -72,7 +69,7 @@ class TemplateHandler:
             )
             return
 
-        tpl = await get_template(user_id, active_name)
+        tpl = await CosmicBotz.get_template(user_id, active_name)
         if not tpl:
             await update.message.reply_text("❌ Active template not found.")
             return
@@ -144,8 +141,8 @@ class TemplateHandler:
                 )
                 return
 
-            await save_template(user_id, name, text)
-            await update_user_settings(user_id, {"active_template": name})
+            await CosmicBotz.save_template(user_id, name, text)
+            await CosmicBotz.update_user_settings(user_id, {"active_template": name})
             await self.sm.clear_state(user_id)
 
             await update.message.reply_text(
@@ -170,7 +167,7 @@ class TemplateHandler:
 
         elif data.startswith("tpl_view_"):
             name = data[9:]
-            tpl = await get_template(user_id, name)
+            tpl = await CosmicBotz.get_template(user_id, name)
             if tpl:
                 await safe_edit(
                     query.message,
@@ -183,15 +180,15 @@ class TemplateHandler:
 
         elif data.startswith("tpl_use_"):
             name = data[8:]
-            await update_user_settings(user_id, {"active_template": name})
+            await CosmicBotz.update_user_settings(user_id, {"active_template": name})
             await safe_answer(query, f"✅ Template '{name}' activated!", alert=True)
 
         elif data.startswith("tpl_del_"):
             name = data[8:]
-            await delete_template(user_id, name)
-            settings = await get_user_settings(user_id)
+            await CosmicBotz.delete_template(user_id, name)
+            settings = await CosmicBotz.get_user_settings(user_id)
             if settings.get("active_template") == name:
-                await update_user_settings(user_id, {"active_template": "default"})
+                await CosmicBotz.update_user_settings(user_id, {"active_template": "default"})
             await safe_answer(query, f"🗑 Template '{name}' deleted.", alert=True)
             # Refresh list
             await self.list_templates(update, context)

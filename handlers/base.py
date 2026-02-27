@@ -13,9 +13,7 @@ from telegram.constants import ParseMode
 from fsm.state_manager import StateManager
 from formatter.engine import FormatEngine
 from thumbnail.processor import build_thumbnail, process_custom_thumbnail
-from database.db import (
-    get_user_settings, get_active_template, increment_post_count
-)
+from database.db import CosmicBotz
 from utils.keyboards import (
     search_results_kb, thumbnail_kb, post_preview_kb, template_select_kb
 )
@@ -201,9 +199,9 @@ class BaseHandler:
         meta = state.get("meta", {})
         custom_image = state.get("custom_image")
 
-        settings = await get_user_settings(user_id)
+        settings = await CosmicBotz.get_user_settings(user_id)
         watermark = settings.get("watermark", "")
-        template_body = await get_active_template(user_id, self.CATEGORY)
+        template_body = await CosmicBotz.get_active_template(user_id, self.CATEGORY)
 
         # Caption
         caption = self.fmt.render(
@@ -233,7 +231,7 @@ class BaseHandler:
     async def _on_post_channel(self, update: Update, context):
         user_id = update.effective_user.id
         state = await self.sm.get_state(user_id)
-        settings = await get_user_settings(user_id)
+        settings = await CosmicBotz.get_user_settings(user_id)
         channel_id = settings.get("channel_id")
 
         if not channel_id:
@@ -249,7 +247,7 @@ class BaseHandler:
 
         success = await post_to_channel(context, channel_id, thumb, caption)
         if success:
-            await increment_post_count(user_id)
+            await CosmicBotz.increment_post_count(user_id)
             await safe_answer(update.callback_query, "✅ Posted to channel!", alert=True)
             await self.sm.clear_state(user_id)
         else:
@@ -269,12 +267,11 @@ class BaseHandler:
             parse_mode=ParseMode.HTML,
         )
         await safe_answer(update.callback_query, "Caption sent!")
-        await increment_post_count(user_id)
+        await CosmicBotz.increment_post_count(user_id)
 
     async def _on_change_template(self, update: Update, context):
-        from database.db import list_user_templates
         user_id = update.effective_user.id
-        templates = await list_user_templates(user_id)
+        templates = await CosmicBotz.list_user_templates(user_id)
         await safe_edit(
             update.callback_query.message,
             "📄 <b>Select a Template:</b>\n\nChoose a template to apply to this post:",
@@ -288,8 +285,7 @@ class BaseHandler:
         if tpl_name == "default":
             await self.sm.update_state(user_id, {"active_template_override": None})
         else:
-            from database.db import get_template
-            tpl = await get_template(user_id, tpl_name)
+            tpl = await CosmicBotz.get_template(user_id, tpl_name)
             if tpl:
                 await self.sm.update_state(user_id, {
                     "active_template_override": tpl["body"]

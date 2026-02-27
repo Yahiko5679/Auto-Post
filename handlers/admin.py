@@ -7,10 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
-from database.db import (
-    ban_user, unban_user, set_premium, get_user,
-    get_all_user_ids, total_users, total_posts
-)
+from database.db import CosmicBotz
 from fsm.state_manager import StateManager
 from utils.keyboards import admin_kb
 from utils.helpers import safe_edit, safe_answer, require_admin, track_user
@@ -25,8 +22,8 @@ class AdminHandler:
 
     @require_admin
     async def panel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        tu = await total_users()
-        tp = await total_posts()
+        tu = await CosmicBotz.total_users()
+        tp = await CosmicBotz.total_posts()
         await update.message.reply_text(
             f"👑 <b>Admin Panel</b>\n\n"
             f"👥 Total Users: <b>{tu}</b>\n"
@@ -49,7 +46,7 @@ class AdminHandler:
         text = update.message.text
         await self.sm.clear_state(user_id)
 
-        user_ids = await get_all_user_ids()
+        user_ids = await CosmicBotz.get_all_user_ids()
         success, fail = 0, 0
 
         status_msg = await update.message.reply_text(
@@ -78,7 +75,7 @@ class AdminHandler:
             await update.message.reply_text("Usage: /ban <user_id>")
             return
         uid = int(args[0])
-        await ban_user(uid)
+        await CosmicBotz.ban_user(uid)
         await update.message.reply_text(f"⛔ User {uid} banned.")
 
     @require_admin
@@ -88,7 +85,7 @@ class AdminHandler:
             await update.message.reply_text("Usage: /unban <user_id>")
             return
         uid = int(args[0])
-        await unban_user(uid)
+        await CosmicBotz.unban_user(uid)
         await update.message.reply_text(f"✅ User {uid} unbanned.")
 
     @require_admin
@@ -98,7 +95,7 @@ class AdminHandler:
             await update.message.reply_text("Usage: /addpremium <user_id>")
             return
         uid = int(args[0])
-        await set_premium(uid, True)
+        await CosmicBotz.set_premium(uid, True)
         await update.message.reply_text(f"⭐ User {uid} is now Premium.")
         try:
             await context.bot.send_message(
@@ -117,7 +114,7 @@ class AdminHandler:
             await update.message.reply_text("Usage: /revokepremium <user_id>")
             return
         uid = int(args[0])
-        await set_premium(uid, False)
+        await CosmicBotz.set_premium(uid, False)
         await update.message.reply_text(f"Premium revoked for user {uid}.")
 
     @require_admin
@@ -127,7 +124,7 @@ class AdminHandler:
             await update.message.reply_text("Usage: /userinfo <user_id>")
             return
         uid = int(args[0])
-        user = await get_user(uid)
+        user = await CosmicBotz.get_user(uid)
         if not user:
             await update.message.reply_text("❌ User not found.")
             return
@@ -145,8 +142,8 @@ class AdminHandler:
 
     @require_admin
     async def global_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        tu = await total_users()
-        tp = await total_posts()
+        tu = await CosmicBotz.total_users()
+        tp = await CosmicBotz.total_posts()
         await update.message.reply_text(
             f"📊 <b>Global Stats</b>\n\n"
             f"👥 Total Users: <b>{tu}</b>\n"
@@ -160,8 +157,8 @@ class AdminHandler:
         data = query.data
 
         if data == "admin_stats":
-            tu = await total_users()
-            tp = await total_posts()
+            tu = await CosmicBotz.total_users()
+            tp = await CosmicBotz.total_posts()
             await safe_edit(
                 query.message,
                 f"📊 <b>Global Stats</b>\n\n"
@@ -181,8 +178,8 @@ class AdminHandler:
             )
 
         elif data == "admin_back":
-            tu = await total_users()
-            tp = await total_posts()
+            tu = await CosmicBotz.total_users()
+            tp = await CosmicBotz.total_posts()
             await safe_edit(
                 query.message,
                 f"👑 <b>Admin Panel</b>\n\n"

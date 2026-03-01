@@ -1,8 +1,8 @@
 """
 /start  /help  /stats
 """
-from pyrofork import Client, filters
-from pyrofork.types import (
+from pyrogram import Client, filters
+from pyrogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
 )

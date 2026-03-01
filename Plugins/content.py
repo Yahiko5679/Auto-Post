@@ -4,8 +4,8 @@ Handles search → select → thumbnail → preview → post flow.
 """
 import io
 import logging
-from pyrofork import Client, filters
-from pyrofork.types import Message, CallbackQuery
+from pyrogram import Client, filters
+from pyrogram.types import Message, CallbackQuery
 
 from database.db import CosmicBotz
 from fetchers.tmdb import TMDbFetcher

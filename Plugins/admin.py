@@ -2,8 +2,8 @@
 Admin — /admin  /broadcast  /ban  /unban  /addpremium  /revokepremium
         /userinfo  /globalstats
 """
-from pyrofork import Client, filters
-from pyrofork.types import Message, CallbackQuery
+from pyrogram import Client, filters
+from pyrogram.types import Message, CallbackQuery
 
 from database.db import CosmicBotz
 from utils.fsm import fsm

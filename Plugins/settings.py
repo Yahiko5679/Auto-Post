@@ -2,8 +2,8 @@
 Settings — /settings  /setwatermark  /setchannel
 Handles all cfg_ callbacks and text input for multi-step flows.
 """
-from pyrofork import Client, filters
-from pyrofork.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram import Client, filters
+from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from database.db import CosmicBotz
 from utils.fsm import fsm

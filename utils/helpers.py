@@ -6,8 +6,8 @@ import functools
 import logging
 from typing import List, Dict
 
-from pyrofork import Client
-from pyrofork.types import (
+from pyrogram import Client
+from pyrogram.types import (
     Message, CallbackQuery,
     InlineKeyboardMarkup, InlineKeyboardButton,
 )

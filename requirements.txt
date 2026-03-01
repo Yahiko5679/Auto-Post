@@ -1,6 +1,5 @@
-# CosmicBotz — Pyrofork edition
 pyrofork==2.3.46
-TgCrypto
+TgCrypto==1.2.5
 aiohttp==3.9.5
 motor==3.5.0
 pymongo==4.8.0

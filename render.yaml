@@ -1,12 +1,14 @@
 services:
-  - type: worker          # worker = no HTTP port needed â€” perfect for bots
+  - type: web
     name: cosmicbotz
-    runtime: docker
+    runtime: docker          # FORCE Docker — never auto-detect Python
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    plan: starter
+    plan: free
     autoDeploy: true
     branch: main
+    healthCheckPath: /health
+
     envVars:
       - key: API_ID
         sync: false
@@ -17,6 +19,8 @@ services:
       - key: ADMIN_IDS
         sync: false
       - key: MONGO_URI
+        sync: false
+      - key: BOT_USERNAME
         sync: false
       - key: TMDB_API_KEY
         sync: false

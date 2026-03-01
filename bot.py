@@ -5,7 +5,7 @@ stays alive and health-checks pass.
 """
 import logging
 from aiohttp import web
-from pyrofork import Client
+from pyrogram import Client
 import config as cfg
 
 logger = logging.getLogger(__name__)

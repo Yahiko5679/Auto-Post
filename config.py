@@ -8,16 +8,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Telegram ──────────────────────────────────────────────────────────────────
-API_ID       = int(os.getenv("API_ID", ""))
+API_ID       = int(os.getenv("API_ID", "0"))
 API_HASH     = os.getenv("API_HASH", "")
 BOT_TOKEN    = os.getenv("BOT_TOKEN", "")
-BOT_USERNAME = os.getenv("BOT_USERNAME", "")
+BOT_USERNAME = os.getenv("BOT_USERNAME", "CosmicBotz")
 
 # ── Admins ────────────────────────────────────────────────────────────────────
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
+ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "0").split(",") if x.strip()]
 
 # ── Database ──────────────────────────────────────────────────────────────────
-MONGO_URI = os.getenv("MONGO_URI", "")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 REDIS_URL  = os.getenv("REDIS_URL", "")
 
 # ── External APIs ─────────────────────────────────────────────────────────────

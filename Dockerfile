@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages GLOBALLY (no --prefix, no virtualenv)
+# Install Python packages
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -22,9 +22,5 @@ COPY . .
 # Font for thumbnails
 RUN mkdir -p assets/fonts temp && \
     cp /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf assets/fonts/ 2>/dev/null || true
-
-# Non-root user
-# RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
-# USER botuser
 
 CMD ["python", "main.py"]

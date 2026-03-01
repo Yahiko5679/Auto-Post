@@ -45,7 +45,7 @@ class CosmicBotzClient(Client):
             api_hash=cfg.API_HASH,
             bot_token=cfg.BOT_TOKEN,
             workers=200,
-            plugins={"root": "plugins"},
+            plugins={"root": "Plugins"},
             sleep_threshold=15,
         )
 

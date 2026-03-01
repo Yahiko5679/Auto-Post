@@ -1,17 +1,15 @@
 """
-Database Layer — MongoDB via motor (async).
-Collections: users, templates, posts, banned
+Database — MongoDB via motor (async).
 
-Usage everywhere in the project:
+Usage anywhere:
     from database.db import CosmicBotz
     await CosmicBotz.get_user(user_id)
 """
-
 import logging
 from datetime import datetime, date
 from typing import Optional, Dict, List
 from motor.motor_asyncio import AsyncIOMotorClient
-from config import MONGO_URI, DB_NAME, FREE_POSTS_PER_DAY, PREMIUM_POSTS_PER_DAY
+import config as cfg
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +20,10 @@ class Database:
 
     def _db(self):
         if self._client is None:
-            self._client = AsyncIOMotorClient(MONGO_URI)
-        return self._client[DB_NAME]
+            self._client = AsyncIOMotorClient(cfg.MONGO_URI)
+        return self._client["CosmicBotz"]
 
-    # ── User Operations ────────────────────────────────────────────────────────
+    # ── Users ─────────────────────────────────────────────────────────────────
 
     async def get_user(self, user_id: int) -> Optional[Dict]:
         return await self._db().users.find_one({"user_id": user_id})
@@ -36,24 +34,23 @@ class Database:
             {"user_id": user_id},
             {
                 "$set": {
-                    "username": username,
+                    "username":  username,
                     "full_name": full_name,
                     "last_seen": now,
                 },
                 "$setOnInsert": {
-                    "user_id": user_id,
-                    "joined": now,
+                    "user_id":    user_id,
+                    "joined":     now,
                     "is_premium": False,
-                    "is_banned": False,
+                    "is_banned":  False,
                     "post_count": 0,
                     "daily_posts": {},
                     "settings": {
-                        "watermark": "",
-                        "channel_id": None,
+                        "watermark":       "",
+                        "channel_id":      None,
                         "active_template": "default",
-                        "auto_post": False,
-                        "quality": "480p | 720p | 1080p",
-                        "audio": "Hindi | English",
+                        "quality":         cfg.DEFAULT_QUALITY,
+                        "audio":           cfg.DEFAULT_AUDIO,
                     },
                 },
             },
@@ -94,19 +91,18 @@ class Database:
         if not user:
             return True
         today = str(date.today())
-        limit = PREMIUM_POSTS_PER_DAY if user.get("is_premium") else FREE_POSTS_PER_DAY
+        limit = (
+            cfg.PREMIUM_POSTS_PER_DAY
+            if user.get("is_premium")
+            else cfg.FREE_POSTS_PER_DAY
+        )
         return user.get("daily_posts", {}).get(today, 0) < limit
 
     async def increment_post_count(self, user_id: int):
         today = str(date.today())
         await self._db().users.update_one(
             {"user_id": user_id},
-            {
-                "$inc": {
-                    "post_count": 1,
-                    f"daily_posts.{today}": 1,
-                }
-            },
+            {"$inc": {"post_count": 1, f"daily_posts.{today}": 1}},
         )
 
     async def get_all_user_ids(self) -> List[int]:
@@ -117,17 +113,17 @@ class Database:
         return await self._db().users.count_documents({})
 
     async def total_posts(self) -> int:
-        result = await self._db().users.aggregate([
-            {"$group": {"_id": None, "total": {"$sum": "$post_count"}}}
-        ]).to_list(1)
+        result = await self._db().users.aggregate(
+            [{"$group": {"_id": None, "total": {"$sum": "$post_count"}}}]
+        ).to_list(1)
         return result[0]["total"] if result else 0
 
-    # ── Template Operations ────────────────────────────────────────────────────
+    # ── Templates ─────────────────────────────────────────────────────────────
 
-    async def save_template(self, user_id: int, name: str, body: str, category: str = "all"):
+    async def save_template(self, user_id: int, name: str, body: str):
         await self._db().templates.update_one(
             {"user_id": user_id, "name": name},
-            {"$set": {"body": body, "category": category, "updated": datetime.utcnow()}},
+            {"$set": {"body": body, "updated": datetime.utcnow()}},
             upsert=True,
         )
 
@@ -135,21 +131,19 @@ class Database:
         return await self._db().templates.find_one({"user_id": user_id, "name": name})
 
     async def list_user_templates(self, user_id: int) -> List[Dict]:
-        cursor = self._db().templates.find({"user_id": user_id})
-        return await cursor.to_list(50)
+        return await self._db().templates.find({"user_id": user_id}).to_list(50)
 
     async def delete_template(self, user_id: int, name: str):
         await self._db().templates.delete_one({"user_id": user_id, "name": name})
 
-    async def get_active_template(self, user_id: int, category: str) -> Optional[str]:
-        """Return template body for the user's active template, or None for default."""
+    async def get_active_template(self, user_id: int) -> Optional[str]:
         settings = await self.get_user_settings(user_id)
-        active_name = settings.get("active_template", "default")
-        if active_name == "default":
+        name = settings.get("active_template", "default")
+        if name == "default":
             return None
-        tpl = await self.get_template(user_id, active_name)
+        tpl = await self.get_template(user_id, name)
         return tpl["body"] if tpl else None
 
 
-# ── Singleton instance ─────────────────────────────────────────────────────────
+# ── Singleton ─────────────────────────────────────────────────────────────────
 CosmicBotz = Database()

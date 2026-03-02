@@ -42,14 +42,13 @@ CAT_TO_PREFIX = {"movie": "movie", "tvshow": "tv", "anime": "anime", "manhwa": "
 
 
 def create_action_button_overlay(category: str, base_img: Image.Image) -> Image.Image:
-    """Adds 'Watch Now' or 'Read Now' pill at bottom-right of thumbnail"""
     img = base_img.copy().convert("RGBA")
     draw = ImageDraw.Draw(img, "RGBA")
 
     text = "Read Now" if category == "manhwa" else "Watch Now"
 
     try:
-        font = ImageFont.truetype("arial.ttf", 48)  # ← change to your font file if needed
+        font = ImageFont.truetype("arial.ttf", 48)  # change path if you have better font
     except:
         font = ImageFont.load_default()
 
@@ -110,7 +109,6 @@ async def _build_preview_data(user_id: int):
         )
         thumb_pil = Image.open(io.BytesIO(thumb_bytes))
 
-    # Add the "Watch Now" / "Read Now" button overlay
     thumb_pil = create_action_button_overlay(category, thumb_pil)
 
     thumb_io = io.BytesIO()
@@ -133,7 +131,7 @@ def build_post_keyboard(buttons_data: list[dict]) -> InlineKeyboardMarkup | None
             builder.button(text=text, url=btn["url"])
         elif btn.get("callback_data"):
             builder.button(text=text, callback_data=btn["callback_data"])
-    builder.adjust(3)  # ← change to 2, 4, etc. if desired
+    builder.adjust(3)
     return builder.as_markup()
 
 
@@ -321,7 +319,6 @@ async def cb_post_channel(cb: CallbackQuery):
     prefix = CAT_TO_PREFIX[state.get("category", "movie")]
 
     if state.get("buttons"):
-        # already have buttons → go to confirm
         await _show_buttons_preview(cb, state, prefix)
         return
 
@@ -369,34 +366,43 @@ async def cb_start_adding_buttons(cb: CallbackQuery):
 
 @router.message(F.text)
 async def collect_button_line(message: Message):
+    text = message.text.strip()
+
+    # Skip if it looks like a command (prevents stealing /settings, /stats etc.)
+    if text.lstrip().startswith("/"):
+        return
+
     user_id = message.from_user.id
     state = await fsm.get(user_id)
+    
     if not state or state.get("step") != "adding_buttons":
         return
 
-    text = message.text.strip()
     if "|" not in text:
-        await message.reply("Use: <code>Text | url:...  or  Text | callback:...</code>")
+        await message.reply("Format: <code>Text | url:https://...   or   Text | callback:...</code>")
         return
 
-    btn_text, value = [p.strip() for p in text.split("|", 1)]
-
+    btn_text, value_part = [p.strip() for p in text.split("|", 1)]
     btn = {"text": btn_text}
-    if value.startswith("url:"):
-        btn["url"] = value[4:].strip()
-    elif value.startswith("callback:"):
-        btn["callback_data"] = value[9:].strip()
-    elif value.startswith(("http", "https")):
-        btn["url"] = value
+
+    if value_part.startswith("url:"):
+        btn["url"] = value_part[4:].strip()
+    elif value_part.startswith("callback:"):
+        btn["callback_data"] = value_part[9:].strip()
+    elif value_part.startswith(("http://", "https://")):
+        btn["url"] = value_part
     else:
-        await message.reply("Must start with url: or callback: or be full link")
+        await message.reply("Value must start with url: or callback: or be full http/https link.")
         return
 
     buttons = state.get("buttons", [])
     buttons.append(btn)
     await fsm.update(user_id, {"buttons": buttons})
 
-    await message.reply(f"Added ({len(buttons)}): {text}\n\nNext or /done")
+    await message.reply(
+        f"Added ({len(buttons)}):\n{text}\n\n"
+        "Send next button or send /done"
+    )
 
 
 @router.message(Command("done"))

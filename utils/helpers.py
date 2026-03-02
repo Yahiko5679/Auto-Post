@@ -55,3 +55,30 @@ async def post_to_channel(bot, channel_id: str, thumb: bytes, caption: str) -> b
         return True
     except Exception:
         return False
+
+
+# ── New button-related keyboards ───────────────────────────────────────
+
+def ask_add_buttons_kb(prefix: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Add button(s)", callback_data=f"{prefix}_add_buttons")
+    builder.button(text="Skip → Post",   callback_data=f"{prefix}_post_no_buttons")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def finish_adding_kb(prefix: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Finish & Preview", callback_data=f"{prefix}_finish_buttons")
+    builder.button(text="Cancel",           callback_data=f"{prefix}_cancel")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+def confirm_post_with_buttons_kb(prefix: str) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Post Now",      callback_data=f"{prefix}_confirm_post_buttons")
+    builder.button(text="✏️ Edit / Add more", callback_data=f"{prefix}_add_buttons")
+    builder.button(text="❌ Cancel",         callback_data=f"{prefix}_cancel")
+    builder.adjust(1, 2)
+    return builder.as_markup()

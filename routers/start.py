@@ -10,6 +10,11 @@ router = Router()
 
 @router.message(Command("start"))
 async def cmd_start(message: Message):
+    await CosmicBotz.upsert_user(
+        message.from_user.id,
+        message.from_user.username or "",
+        message.from_user.full_name or "",
+    )
     name = message.from_user.first_name
     kb = InlineKeyboardBuilder()
     kb.button(text="🎬 Movie",   callback_data="eg_movie")

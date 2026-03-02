@@ -43,7 +43,7 @@ class FormatEngine:
         template: Optional[str] = None,
         user_settings: Optional[Dict] = None,
     ) -> str:
-        tpl = template or self._DEFAULTS.get(category, lambda: "{title}")()
+        tpl    = template or self._DEFAULTS.get(category, lambda: "{title}")()
         tokens = self._tokens(category, metadata, user_settings or {})
         return self._sub(tpl, tokens)
 
@@ -53,9 +53,8 @@ class FormatEngine:
         title   = meta.get("title", "Unknown")
         genres  = meta.get("genres", "") or ""
 
-        # IMDb rating resolution
-        imdb_r  = meta.get("imdb_rating")
-        imdb_str = str(imdb_r) if imdb_r and imdb_r != "N/A" else str(meta.get("rating", "N/A"))
+        imdb_r   = meta.get("imdb_rating")
+        imdb_str = str(imdb_r) if imdb_r and str(imdb_r) not in ("N/A", "0", "") else str(meta.get("rating", "N/A"))
 
         base = {
             "title":          title,
@@ -96,7 +95,7 @@ class FormatEngine:
         elif category == "anime":
             r = meta.get("rating", 0)
             base.update({
-                "rating":    f"{r}%" if isinstance(r, int) else str(r),
+                "rating":    f"{r}%" if isinstance(r, (int, float)) and r > 0 else "N/A",
                 "title_jp":  meta.get("title_jp", ""),
                 "synopsis":  meta.get("synopsis", "N/A"),
                 "status":    meta.get("status", "N/A"),
@@ -110,7 +109,7 @@ class FormatEngine:
         elif category == "manhwa":
             r = meta.get("rating", 0)
             base.update({
-                "rating":       f"{r}%" if isinstance(r, int) else str(r),
+                "rating":       f"{r}%" if isinstance(r, (int, float)) and r > 0 else "N/A",
                 "title_native": meta.get("title_native", ""),
                 "synopsis":     meta.get("synopsis", "N/A"),
                 "status":       meta.get("status", "N/A"),
@@ -124,16 +123,28 @@ class FormatEngine:
 
     def _sub(self, tpl: str, tokens: Dict) -> str:
         for k, v in tokens.items():
-            tpl = tpl.replace("{" + k + "}", str(v) if v is not None else "N/A")
+            tpl = tpl.replace("{" + k + "}", str(v) if v is not None else "")
+        # Remove leftover unknown tokens
         tpl = re.sub(r"\{[^}]+\}", "", tpl)
-        tpl = re.sub(r"\n{3,}", "\n\n", tpl)
-        return tpl.strip()
+        # Remove lines where the only content after label is N/A or empty
+        lines   = tpl.split("\n")
+        cleaned = []
+        for line in lines:
+            stripped = line.strip()
+            # Drop lines ending with » N/A  or  » ?  or  :  N/A
+            if re.search(r"[»:]\s*(N/A|\?)\s*$", stripped):
+                continue
+            cleaned.append(line)
+        result = "\n".join(cleaned)
+        # Collapse 3+ blank lines to max 2
+        result = re.sub(r"\n{3,}", "\n\n", result)
+        return result.strip()
 
     def _hashtags(self, title: str, category: str, genres: str) -> str:
-        clean    = re.sub(r"[^\w\s]", "", title)
-        tag      = "#" + "_".join(clean.split()).title()
-        cat_tag  = {"movie": "#Movie", "tvshow": "#TVShow",
-                    "anime": "#Anime", "manhwa": "#Manhwa"}.get(category, "")
+        clean     = re.sub(r"[^\w\s]", "", title)
+        tag       = "#" + "_".join(clean.split()).title()
+        cat_tag   = {"movie": "#Movie", "tvshow": "#TVShow",
+                     "anime": "#Anime", "manhwa": "#Manhwa"}.get(category, "")
         genre_tags = [
             "#" + g.strip().replace(" ", "")
             for g in (genres or "").split(",")[:3] if g.strip()

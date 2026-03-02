@@ -36,6 +36,7 @@ EXAMPLES = {
     "anime": "Attack on Titan", "manhwa": "Solo Leveling",
 }
 PREFIX_TO_CAT = {"movie": "movie", "tv": "tvshow", "anime": "anime", "manhwa": "manhwa"}
+CAT_TO_PREFIX = {"movie": "movie", "tvshow": "tv", "anime": "anime", "manhwa": "manhwa"}
 
 
 async def _search(message: Message, category: str):
@@ -67,16 +68,13 @@ async def _search(message: Message, category: str):
 async def cmd_movie(message: Message):
     await _search(message, "movie")
 
-
 @router.message(Command("tvshow"))
 async def cmd_tvshow(message: Message):
     await _search(message, "tvshow")
 
-
 @router.message(Command("anime"))
 async def cmd_anime(message: Message):
     await _search(message, "anime")
-
 
 @router.message(Command("manhwa"))
 async def cmd_manhwa(message: Message):
@@ -91,7 +89,7 @@ async def cb_select(cb: CallbackQuery):
     raw_prefix = parts[0]
     item_id    = int(parts[1])
     category   = PREFIX_TO_CAT[raw_prefix]
-    _, detail_fn, prefix = FETCHERS[category]
+    _, detail_fn, _ = FETCHERS[category]
 
     await cb.message.edit_text("⏳ Fetching details...")
     try:
@@ -108,7 +106,7 @@ async def cb_select(cb: CallbackQuery):
     await cb.message.edit_text(
         f"🖼 <b>{meta['title']}</b> — details ready!\n\n"
         "📸 Send a <b>custom thumbnail</b> or tap <b>Skip</b> to use auto poster.",
-        reply_markup=thumbnail_kb(prefix),
+        reply_markup=thumbnail_kb(CAT_TO_PREFIX[category]),
     )
 
 
@@ -116,7 +114,8 @@ async def cb_select(cb: CallbackQuery):
 async def cb_skip_thumb(cb: CallbackQuery):
     await cb.answer()
     await fsm.update(cb.from_user.id, {"step": "preview", "custom_image": None})
-    await _show_preview(cb.message, cb.from_user.id)
+    await cb.message.edit_text("⏳ Building preview...")
+    await _show_preview(cb)
 
 
 @router.message(F.photo)
@@ -131,13 +130,14 @@ async def handle_photo(message: Message):
     await message.bot.download_file(file.file_path, destination=buf)
     photo_bytes = buf.getvalue()
     await fsm.update(user_id, {"step": "preview", "custom_image": photo_bytes})
-    await _show_preview(wait, user_id, edit=True)
+    await _show_preview_from_message(wait, user_id)
 
 
-async def _show_preview(msg: Message, user_id: int, edit: bool = False):
+async def _build_preview_data(user_id: int):
+    """Build caption and thumbnail bytes. Returns (caption, thumb, prefix) or None."""
     state = await fsm.get(user_id)
     if not state:
-        return
+        return None
     meta         = state.get("meta", {})
     category     = state.get("category", "movie")
     custom_image = state.get("custom_image")
@@ -156,8 +156,42 @@ async def _show_preview(msg: Message, user_id: int, edit: bool = False):
             watermark=watermark,
         )
 
-    prefix = {"movie": "movie", "tvshow": "tv", "anime": "anime", "manhwa": "manhwa"}[category]
+    prefix = CAT_TO_PREFIX[category]
     await fsm.update(user_id, {"caption": caption, "thumb": thumb, "step": "post"})
+    return caption, thumb, prefix
+
+
+async def _show_preview(cb: CallbackQuery):
+    """Called from a callback — deletes old message and sends new photo."""
+    user_id = cb.from_user.id
+    result  = await _build_preview_data(user_id)
+    if not result:
+        await cb.message.edit_text("❌ Session expired. Please start again.")
+        return
+    caption, thumb, prefix = result
+
+    # Delete the current message safely
+    try:
+        await cb.message.delete()
+    except Exception:
+        pass
+
+    photo = BufferedInputFile(thumb, filename="thumb.jpg")
+    await cb.bot.send_photo(
+        chat_id=cb.message.chat.id,
+        photo=photo,
+        caption=caption,
+        reply_markup=preview_kb(prefix),
+    )
+
+
+async def _show_preview_from_message(msg: Message, user_id: int):
+    """Called from a message handler."""
+    result = await _build_preview_data(user_id)
+    if not result:
+        await msg.edit_text("❌ Session expired. Please start again.")
+        return
+    caption, thumb, prefix = result
 
     try:
         await msg.delete()
@@ -178,11 +212,16 @@ async def cb_post_channel(cb: CallbackQuery):
     await cb.answer()
     user_id  = cb.from_user.id
     state    = await fsm.get(user_id)
+
+    if not state or not state.get("thumb"):
+        await cb.answer("❌ Session expired. Generate the post again.", show_alert=True)
+        return
+
     settings = await CosmicBotz.get_user_settings(user_id)
     channel  = settings.get("channel_id")
 
     if not channel:
-        await cb.answer("⚠️ No channel set! Go to /settings → Channel.", show_alert=True)
+        await cb.answer("⚠️ No channel set! Use /settings → Channel.", show_alert=True)
         return
 
     try:
@@ -190,17 +229,20 @@ async def cb_post_channel(cb: CallbackQuery):
         await cb.bot.send_photo(chat_id=channel, photo=photo, caption=state["caption"])
         await CosmicBotz.increment_post_count(user_id)
         await fsm.clear(user_id)
-        await cb.answer("✅ Posted successfully!", show_alert=True)
+        await cb.answer("✅ Posted to channel!", show_alert=True)
         await cb.message.delete()
     except Exception as e:
         logger.error(f"Post to channel failed: {e}")
-        await cb.answer("❌ Post failed — make sure bot is admin in the channel.", show_alert=True)
+        await cb.answer(f"❌ Failed: {e}", show_alert=True)
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_post_copy$"))
 async def cb_copy(cb: CallbackQuery):
     await cb.answer()
     state = await fsm.get(cb.from_user.id)
+    if not state:
+        await cb.answer("❌ Session expired.", show_alert=True)
+        return
     await cb.message.answer(f"📋 <b>Caption:</b>\n\n{state.get('caption', '')}")
     await CosmicBotz.increment_post_count(cb.from_user.id)
 
@@ -209,10 +251,17 @@ async def cb_copy(cb: CallbackQuery):
 async def cb_change_tpl(cb: CallbackQuery):
     await cb.answer()
     state     = await fsm.get(cb.from_user.id)
+    if not state:
+        await cb.answer("❌ Session expired.", show_alert=True)
+        return
     category  = state.get("category", "movie")
-    prefix    = {"movie": "movie", "tvshow": "tv", "anime": "anime", "manhwa": "manhwa"}[category]
+    prefix    = CAT_TO_PREFIX[category]
     templates = await CosmicBotz.list_user_templates(cb.from_user.id)
-    await cb.message.edit_text("📄 <b>Select a Template:</b>", reply_markup=template_kb(templates, prefix))
+    # Edit caption of the photo message
+    await cb.message.edit_caption(
+        caption="📄 <b>Select a Template:</b>",
+        reply_markup=template_kb(templates, prefix),
+    )
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_tpl_(.+)$"))
@@ -226,24 +275,29 @@ async def cb_tpl_pick(cb: CallbackQuery):
         tpl = await CosmicBotz.get_template(user_id, tpl_name)
         if tpl:
             await CosmicBotz.update_user_settings(user_id, {"active_template": tpl_name})
-    await _show_preview(cb.message, user_id)
+    await cb.answer("✅ Template applied!", show_alert=False)
+    await _show_preview(cb)
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_back_preview$"))
 async def cb_back_preview(cb: CallbackQuery):
     await cb.answer()
-    await _show_preview(cb.message, cb.from_user.id)
+    await _show_preview(cb)
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_redo_thumb$"))
 async def cb_redo_thumb(cb: CallbackQuery):
     await cb.answer()
     state    = await fsm.get(cb.from_user.id)
+    if not state:
+        await cb.answer("❌ Session expired.", show_alert=True)
+        return
     category = state.get("category", "movie")
-    prefix   = {"movie": "movie", "tvshow": "tv", "anime": "anime", "manhwa": "manhwa"}[category]
+    prefix   = CAT_TO_PREFIX[category]
     await fsm.update(cb.from_user.id, {"step": "thumbnail"})
-    await cb.message.edit_text(
-        "📸 Send a new thumbnail image or tap Skip:",
+    # edit_caption works on photo messages, edit_text does not
+    await cb.message.edit_caption(
+        caption="📸 Send a new thumbnail image or tap Skip:",
         reply_markup=thumbnail_kb(prefix),
     )
 
@@ -252,4 +306,7 @@ async def cb_redo_thumb(cb: CallbackQuery):
 async def cb_cancel(cb: CallbackQuery):
     await cb.answer("Cancelled.")
     await fsm.clear(cb.from_user.id)
-    await cb.message.edit_text("✅ Cancelled.")
+    try:
+        await cb.message.delete()
+    except Exception:
+        pass

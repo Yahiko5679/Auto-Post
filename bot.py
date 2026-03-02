@@ -32,9 +32,10 @@ dp = Dispatcher()
 
 async def on_startup():
     # Register all routers
-    for router in get_all_routers():
+    all_routers = get_all_routers()
+    for router in all_routers:
         dp.include_router(router)
-    LOGGER.info(f"✅ Loaded {len(dp.routers)} routers")
+    LOGGER.info(f"✅ Loaded {len(all_routers)} routers")
 
     # Notify admins
     for admin_id in ADMIN_IDS:

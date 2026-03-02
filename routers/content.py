@@ -364,13 +364,9 @@ async def cb_start_adding_buttons(cb: CallbackQuery):
     await cb.message.edit_caption(caption=text, reply_markup=finish_adding_kb(prefix))
 
 
-@router.message(F.text)
+@router.message(F.text & ~F.text.startswith("/"))
 async def collect_button_line(message: Message):
     text = message.text.strip()
-
-    # Skip if it looks like a command (prevents stealing /settings, /stats etc.)
-    if text.lstrip().startswith("/"):
-        return
 
     user_id = message.from_user.id
     state = await fsm.get(user_id)

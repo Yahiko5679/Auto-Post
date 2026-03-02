@@ -151,10 +151,11 @@ async def _build_preview_data(user_id: int):
         thumb = await process_custom_thumbnail(custom_image, watermark=watermark)
     else:
         thumb = await build_thumbnail(
-            poster_url=meta.get("poster"),
-            backdrop_url=meta.get("backdrop") or meta.get("banner"),
-            watermark=watermark,
-        )
+    poster_url=meta.get("poster"),
+    backdrop_url=meta.get("backdrop") or meta.get("banner"),
+    watermark=watermark,
+    meta={**meta, "_category": category},
+)
 
     prefix = CAT_TO_PREFIX[category]
     await fsm.update(user_id, {"caption": caption, "thumb": thumb, "step": "post"})

@@ -8,19 +8,24 @@ from database.db import CosmicBotz
 router = Router()
 
 
-@router.message(Command("start"))
-async def cmd_start(message: Message):
+async def _ensure_user(message: Message):
+    """Save user to DB if not exists."""
     await CosmicBotz.upsert_user(
         message.from_user.id,
         message.from_user.username or "",
         message.from_user.full_name or "",
     )
+
+
+@router.message(Command("start"))
+async def cmd_start(message: Message):
+    await _ensure_user(message)
     name = message.from_user.first_name
     kb = InlineKeyboardBuilder()
-    kb.button(text="🎬 Movie",   callback_data="eg_movie")
-    kb.button(text="📺 TV Show", callback_data="eg_tv")
-    kb.button(text="🌸 Anime",   callback_data="eg_anime")
-    kb.button(text="📖 Manhwa",  callback_data="eg_manhwa")
+    kb.button(text="🎬 Movie",    callback_data="eg_movie")
+    kb.button(text="📺 TV Show",  callback_data="eg_tv")
+    kb.button(text="🌸 Anime",    callback_data="eg_anime")
+    kb.button(text="📖 Manhwa",   callback_data="eg_manhwa")
     kb.button(text="⚙️ Settings", callback_data="cfg_open")
     kb.adjust(2, 2, 1)
     await message.answer(
@@ -39,6 +44,7 @@ async def cmd_start(message: Message):
 
 @router.message(Command("help"))
 async def cmd_help(message: Message):
+    await _ensure_user(message)
     await message.answer(
         "📖 <b>CosmicBotz — Help</b>\n\n"
         "<b>Content:</b>\n"
@@ -59,10 +65,8 @@ async def cmd_help(message: Message):
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message):
+    await _ensure_user(message)
     user = await CosmicBotz.get_user(message.from_user.id)
-    if not user:
-        await message.answer("No stats yet — generate your first post!")
-        return
     plan = "⭐ Premium" if user.get("is_premium") else "Free"
     await message.answer(
         f"📊 <b>Your Stats</b>\n\n"

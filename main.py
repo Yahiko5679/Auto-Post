@@ -1,27 +1,9 @@
-"""
-CosmicBotz — Entry Point
-Run: python main.py
-"""
-import asyncio
-import logging
 import os
-from bot import CosmicBotz
+import sys
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+os.chdir(_ROOT)
+sys.path.insert(0, _ROOT)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
+from bot import main
 
-
-async def main():
-    os.makedirs("assets/fonts", exist_ok=True)
-    os.makedirs("temp", exist_ok=True)
-
-    async with CosmicBotz:
-        logger.info("🚀 CosmicBotz is running...")
-        await asyncio.Event().wait()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+main()

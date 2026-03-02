@@ -1,73 +1,76 @@
-"""
-CosmicBotz — Pyrogram Client + aiohttp health server
-"""
 import os
 import sys
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+os.chdir(_ROOT)
+sys.path.insert(0, _ROOT)
+
+import asyncio
 import logging
-
-# Set working directory to project root
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
 from aiohttp import web
-from pyrogram import Client
-import config as cfg
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-# ── Manually import all plugins so handlers register ─────────────────────────
-import Plugins.start
-import Plugins.content
-import Plugins.settings
-import Plugins.templates
-import Plugins.admin
-# ─────────────────────────────────────────────────────────────────────────────
+from config import BOT_TOKEN, ADMIN_IDS, PORT, WEBHOOK_URL
+from routers import get_all_routers
 
-logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+)
+LOGGER = logging.getLogger(__name__)
 
-# ── Web routes ────────────────────────────────────────────────────────────────
-CosmicBotz_Web = web.RouteTableDef()
+WEBHOOK_PATH = "/webhook"
 
-
-@CosmicBotz_Web.get("/", allow_head=True)
-async def root_handler(request):
-    return web.json_response("CosmicBotz [AutoPost Generator]")
-
-
-@CosmicBotz_Web.get("/health", allow_head=True)
-async def health_handler(request):
-    return web.json_response({"status": "ok", "bot": cfg.BOT_USERNAME})
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
+dp = Dispatcher()
 
 
-async def web_server():
-    app = web.Application(client_max_size=30_000_000)
-    app.add_routes(CosmicBotz_Web)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host="0.0.0.0", port=cfg.PORT)
-    await site.start()
-    logger.info(f"🌐 Web server running on port {cfg.PORT}")
+async def on_startup():
+    # Register all routers
+    for router in get_all_routers():
+        dp.include_router(router)
+    LOGGER.info(f"✅ Loaded {len(dp.routers)} routers")
+
+    # Notify admins
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text="<b><blockquote>🤖 CosmicBotz Started ✅</blockquote></b>",
+            )
+        except Exception as e:
+            LOGGER.warning(f"Could not notify admin {admin_id}: {e}")
+
+    # Set webhook
+    webhook = f"{WEBHOOK_URL.rstrip('/')}{WEBHOOK_PATH}"
+    await bot.set_webhook(url=webhook, drop_pending_updates=True)
+    LOGGER.info(f"✅ Webhook set → {webhook}")
 
 
-# ── Bot client ────────────────────────────────────────────────────────────────
-class CosmicBotzClient(Client):
-    def __init__(self):
-        super().__init__(
-            name="CosmicBotz",
-            api_id=cfg.API_ID,
-            api_hash=cfg.API_HASH,
-            bot_token=cfg.BOT_TOKEN,
-            workers=200,
-            sleep_threshold=15,
-        )
-
-    async def start(self):
-        await super().start()
-        me = await self.get_me()
-        logger.info(f"✅ CosmicBotz started as @{me.username}")
-        await web_server()
-
-    async def stop(self):
-        await super().stop()
-        logger.info("⛔ CosmicBotz stopped.")
+async def on_shutdown():
+    await bot.delete_webhook()
+    LOGGER.info("⛔ Webhook deleted.")
 
 
-CosmicBotz = CosmicBotzClient()
+def main():
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
+
+    app = web.Application()
+    app.router.add_get("/", lambda r: web.Response(text="CosmicBotz Running!"))
+    app.router.add_get("/health", lambda r: web.Response(text="OK"))
+
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+
+    LOGGER.info(f"🌐 Starting on port {PORT}")
+    web.run_app(app, host="0.0.0.0", port=PORT)
+
+
+if __name__ == "__main__":
+    main()

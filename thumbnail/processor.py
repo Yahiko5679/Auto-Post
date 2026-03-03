@@ -1,6 +1,6 @@
 """
 Thumbnail Processor — Streaming platform dark style (Anime Metrix reference)
-Fixed: missing meta vars + right-side image visibility + premium buttons UX
+Updated: more visible right-side image area (less left overlay), solid dark bg
 """
 import io
 import os
@@ -108,36 +108,36 @@ def _build_card(
     category = meta.get("_category", "anime")
     runtime  = meta.get("runtime", "") or meta.get("duration", "")
 
-    # ── Base with brighter backdrop for better visibility ─────────────────────
-    canvas = Image.new("RGBA", (W, H), (14, 14, 20, 255))
+    # ── Base with balanced backdrop ──────────────────────────────────────────
+    canvas = Image.new("RGBA", (W, H), (14, 14, 20, 255))  # solid dark — no transparency
 
     bg = (backdrop or poster).convert("RGBA").resize((W, H), Image.LANCZOS)
     bg = bg.filter(ImageFilter.GaussianBlur(9))
-    bg = ImageEnhance.Brightness(bg).enhance(0.48)     # increased visibility
-    bg = ImageEnhance.Contrast(bg).enhance(1.12)
+    bg = ImageEnhance.Brightness(bg).enhance(0.42)     # balanced brightness
+    bg = ImageEnhance.Contrast(bg).enhance(1.10)
     canvas.paste(bg, (0, 0))
 
-    # ── Right-side character/poster art ───────────────────────────────────────
+    # ── Right-side character/poster — more visible area ──────────────────────
     char_img = poster.convert("RGBA")
-    char_h   = int(H * 0.92)                # balanced scale (was 1.05)
+    char_h   = int(H * 0.96)                # slightly larger but balanced
     char_w   = int(char_h * char_img.width / char_img.height)
     char_img = char_img.resize((char_w, char_h), Image.LANCZOS)
 
-    char_x = W - char_w + int(char_w * 0.06)  # slight dynamic overlap
+    char_x = W - char_w + int(char_w * 0.04)  # minimal offset → more right space
     char_y = -int(H * 0.02)
 
-    # Soft left fade — more of the image visible
-    fade_w = int(char_w * 0.30)
+    # Very soft left fade — preserves more right image
+    fade_w = int(char_w * 0.28)  # narrower fade area
     for i in range(fade_w):
-        alpha = int(255 * (i / fade_w) ** 0.9)  # gentle fade
+        alpha = int(255 * (i / fade_w) ** 0.85)  # extremely gentle
         for yy in range(char_img.height):
             r, g, b, a = char_img.getpixel((i, yy))
             char_img.putpixel((i, yy), (r, g, b, min(a, alpha)))
 
-    # Minimal bottom fade
-    fade_bot = int(char_h * 0.08)
+    # Almost no bottom fade
+    fade_bot = int(char_h * 0.06)
     for j in range(fade_bot):
-        alpha = int(255 * (j / fade_bot) ** 1.0)
+        alpha = int(255 * (j / fade_bot) ** 0.9)
         yy = char_h - fade_bot + j
         if yy < char_h:
             for xi in range(char_w):
@@ -146,11 +146,11 @@ def _build_card(
 
     canvas.paste(char_img, (char_x, char_y), char_img)
 
-    # ── Soft left gradient — text readable but image shines through ──────────
+    # ── Narrow & soft left gradient → right image gets much more space ───────
     grad = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     gd = ImageDraw.Draw(grad)
-    for i in range(int(W * 0.50)):
-        alpha = max(0, int(110 - (i / (W * 0.50)) * 130))
+    for i in range(int(W * 0.38)):  # only ~38% width — right 62% fully visible
+        alpha = max(0, int(120 - (i / (W * 0.38)) * 140))  # soft fade
         gd.line([(i, 0), (i, H)], fill=(8, 8, 14, alpha))
     canvas = Image.alpha_composite(canvas, grad)
 
@@ -158,7 +158,7 @@ def _build_card(
 
     left_x = 80
     title_y = 140
-    text_w = int(W * 0.50)
+    text_w = int(W * 0.48)  # text area slightly narrower to give right more room
 
     # ── Genres ────────────────────────────────────────────────────────────────
     _draw_genre_tags(draw, genres, left_x, 90, text_w)
@@ -168,7 +168,7 @@ def _build_card(
     tlines = _wrap(title, tf, draw, text_w)[:3]
     y = title_y
     for ln in tlines:
-        draw.text((left_x + 4, y + 4), ln, font=tf, fill=(0, 0, 0, 160))  # shadow
+        draw.text((left_x + 4, y + 4), ln, font=tf, fill=(0, 0, 0, 160))
         draw.text((left_x, y), ln, font=tf, fill=(255, 255, 255, 255))
         y += 84
 
@@ -189,44 +189,34 @@ def _build_card(
     btn_pad = 50
     btn_gap = 24
 
-    # DOWNLOAD button — metallic/outline premium style
     dl_label = "DOWNLOAD"
     dl_w = int(draw.textlength(dl_label, font=btn_font)) + btn_pad * 2
     dl_x = left_x
     dl_y = y
 
-    # Shadow
     draw.rounded_rectangle([dl_x + 5, dl_y + 5, dl_x + dl_w + 5, dl_y + btn_h + 5], radius=36, fill=(0, 0, 0, 120))
-
-    # Gradient bg
     for i in range(btn_h):
         a = 200 + int((i / btn_h) * 55)
         draw.line([(dl_x, dl_y + i), (dl_x + dl_w, dl_y + i)], fill=(50, 50, 70, a))
-
     draw.rounded_rectangle([dl_x, dl_y, dl_x + dl_w, dl_y + btn_h], radius=36,
                            outline=(160, 160, 220, 220), width=4)
     dl_tx = dl_x + (dl_w - int(draw.textlength(dl_label, font=btn_font))) // 2
     draw.text((dl_tx, dl_y + 20), dl_label, font=btn_font, fill=(240, 240, 255, 255))
 
-    # WATCH NOW button — bold red premium style
     wn_label = "WATCH NOW"
     wn_w = int(draw.textlength(wn_label, font=btn_font)) + btn_pad * 2
     wn_x = dl_x + dl_w + btn_gap
     wn_y = y
 
-    # Shadow
     draw.rounded_rectangle([wn_x + 6, wn_y + 6, wn_x + wn_w + 6, wn_y + btn_h + 6], radius=36, fill=(0, 0, 0, 140))
-
-    # Red gradient
     for i in range(btn_h):
         r = 220 - int(i / btn_h * 40)
         draw.line([(wn_x, wn_y + i), (wn_x + wn_w, wn_y + i)], fill=(r, 40, 40, 255))
-
     draw.rounded_rectangle([wn_x, wn_y, wn_x + wn_w, wn_y + btn_h], radius=36, fill=(220, 45, 45, 255))
     wn_tx = wn_x + (wn_w - int(draw.textlength(wn_label, font=btn_font))) // 2
     draw.text((wn_tx, wn_y + 20), wn_label, font=btn_font, fill=(255, 255, 255, 255))
 
-    # ── Episode card bottom-right (clean & small) ────────────────────────────
+    # ── Episode card bottom-right ────────────────────────────────────────────
     card_w, card_h = 300, 100
     card_x = W - card_w - 50
     card_y = H - card_h - 50
@@ -254,7 +244,6 @@ def _build_card(
 
     canvas.paste(card, (card_x, card_y), card)
 
-    # ── Watermark ─────────────────────────────────────────────────────────────
     canvas = _draw_logo_watermark(canvas, watermark)
 
     return canvas.convert("RGB")

@@ -875,18 +875,23 @@ async def handle_text_input(message: Message):
         )
 
     elif step == "tpl_body":
-        if "{title}" not in text:
-            await message.answer(f"⚠️ {sc('must contain')} <code>{{title}}</code>. {sc('try again:')}")
-            return
-        name = state.get("tpl_name", "unnamed")
-        await CosmicBotz.save_template(uid, name, text)
-        await CosmicBotz.update_user_settings(uid, {"active_template": name})
-        await fsm.clear(uid)
-        await message.answer(f"✅ <b>{sc(f\"template '{name}' saved and activated!\")}</b>")
+    if "{title}" not in text:
+        await message.answer(f"⚠️ {sc('must contain')} <code>{{title}}</code>. {sc('try again:')}")
+        return
+    
+    name = state.get("tpl_name", "unnamed")
+    await CosmicBotz.save_template(uid, name, text)
+    await CosmicBotz.update_user_settings(uid, {"active_template": name})
+    await fsm.clear(uid)
+    
+    
+    success_msg = f"template '{name}' saved and activated!"
+    await message.answer(f"✅ <b>{sc(success_msg)}</b>")
 
-    elif step == "adm_broadcast":
-        from routers.admin import do_broadcast
-        await do_broadcast(message, text)
+
+elif step == "adm_broadcast":
+    from routers.admin import do_broadcast
+    await do_broadcast(message, text)
 
     # ── Admin user management flow ────────────────────────────────────────────
 

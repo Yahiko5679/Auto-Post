@@ -237,9 +237,10 @@ async def cmd_category(message: Message):
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_select_(\d+)$"))
 async def cb_select(cb: CallbackQuery):
     await cb.answer()
-    allowed, reason = await check_mode(message.from_user.id)
+    # ✅ Fixed: was using `message` instead of `cb`
+    allowed, reason = await check_mode(cb.from_user.id)
     if not allowed:
-        await message.answer(reason)
+        await cb.message.answer(reason)
         return
     parts      = cb.data.split("_select_")
     raw_prefix = parts[0]

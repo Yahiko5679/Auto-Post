@@ -17,6 +17,8 @@ from utils.helpers import (
     template_kb, add_button_start_kb, button_manage_kb, default_buttons_kb,
 )
 
+from routers.admin import is_admin
+
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -873,3 +875,84 @@ async def handle_text_input(message: Message):
     elif step == "adm_broadcast":
         from routers.admin import do_broadcast
         await do_broadcast(message, text)
+
+
+# ───────────────────────────────────────────────────────────
+    elif step == "adm_userinfo":
+        if not text.lstrip("-").isdigit():
+            await message.answer("❌ Send a valid numeric user ID:")
+            return
+        await fsm.clear(uid)
+        from routers.admin import _send_userinfo
+        await _send_userinfo(message, int(text))
+
+    elif step == "adm_ban":
+        if not text.isdigit():
+            await message.answer("❌ Send a valid numeric user ID:")
+            return
+        await fsm.clear(uid)
+        target_id = int(text)
+        await CosmicBotz.ban_user(target_id)
+        await message.answer(f"⛔ User <code>{target_id}</code> banned.")
+        try:
+            await message.bot.send_message(target_id, "⛔ You have been <b>banned</b> from this bot.")
+        except Exception:
+            pass
+
+    elif step == "adm_unban":
+        if not text.isdigit():
+            await message.answer("❌ Send a valid numeric user ID:")
+            return
+        await fsm.clear(uid)
+        target_id = int(text)
+        await CosmicBotz.unban_user(target_id)
+        await message.answer(f"✅ User <code>{target_id}</code> unbanned.")
+        try:
+            await message.bot.send_message(target_id, "✅ You have been <b>unbanned</b>. Welcome back!")
+        except Exception:
+            pass
+
+    elif step == "adm_addpremium":
+        if not text.isdigit():
+            await message.answer("❌ Send a valid numeric user ID:")
+            return
+        await fsm.clear(uid)
+        target_id = int(text)
+        await CosmicBotz.set_premium(target_id, True)
+        await message.answer(f"⭐ Premium granted to <code>{target_id}</code>.")
+        try:
+            await message.bot.send_message(target_id, "🎉 <b>You've been upgraded to ⭐ Premium!</b>\nEnjoy unlimited access.")
+        except Exception:
+            pass
+
+    elif step == "adm_revoke":
+        if not text.isdigit():
+            await message.answer("❌ Send a valid numeric user ID:")
+            return
+        await fsm.clear(uid)
+        target_id = int(text)
+        await CosmicBotz.set_premium(target_id, False)
+        await message.answer(f"✅ Premium revoked for <code>{target_id}</code>.")
+        try:
+            await message.bot.send_message(target_id, "ℹ️ Your <b>Premium</b> access has been revoked.")
+        except Exception:
+            pass
+
+    elif step == "adm_maint_msg":
+        await fsm.clear(uid)
+        await CosmicBotz.set_maintenance_message(text)
+        await message.answer(
+            f"✅ <b>Maintenance message saved!</b>\n\n"
+            f"<i>{text}</i>\n\n"
+            "Use <code>/mode maintenance</code> to activate it."
+        )
+
+
+# ── Add this mode guard at the TOP of _search() and cb_select() ───────────────
+# (and any other user-facing entry points)
+
+    from routers.admin import check_mode
+    allowed, reason = await check_mode(message.from_user.id)
+    if not allowed:
+        await message.answer(reason)
+        return

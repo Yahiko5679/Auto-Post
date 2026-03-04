@@ -9,6 +9,21 @@ import config as cfg
 
 logger = logging.getLogger(__name__)
 
+# ── Small caps map ────────────────────────────────────────────────────────────
+_SC = str.maketrans(
+    "abcdefghijklmnopqrstuvwxyz",
+    "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ"
+)
+
+def to_small_caps(text: str) -> str:
+    """Convert lowercase letters to small caps unicode. Uppercase/symbols untouched."""
+    return text.translate(_SC)
+
+
+def sc(text: str) -> str:
+    """Shorthand — converts a full string to small caps."""
+    return to_small_caps(text.lower())
+
 
 class FormatEngine:
     _DEFAULTS = {
@@ -45,7 +60,41 @@ class FormatEngine:
     ) -> str:
         tpl    = template or self._DEFAULTS.get(category, lambda: "{title}")()
         tokens = self._tokens(category, metadata, user_settings or {})
-        return self._sub(tpl, tokens)
+        result = self._sub(tpl, tokens)
+        # Apply small caps to the final rendered caption
+        return self._apply_small_caps(result)
+
+    def _apply_small_caps(self, text: str) -> str:
+        """
+        Convert plain words to small caps, but preserve:
+        - HTML tags (<b>, </b>, <i>, <code>, etc.)
+        - Emoji
+        - URLs
+        - Hashtags (keep as-is)
+        - Numbers and symbols
+        Only lowercase plain text words are converted.
+        """
+        # Split by HTML tags — preserve tags, convert text nodes
+        parts  = re.split(r"(<[^>]+>)", text)
+        result = []
+        for part in parts:
+            if part.startswith("<"):
+                result.append(part)   # HTML tag — leave untouched
+            else:
+                # Convert plain text — but skip URLs and hashtags
+                result.append(self._sc_words(part))
+        return "".join(result)
+
+    def _sc_words(self, text: str) -> str:
+        """Apply small caps word by word, skipping URLs and hashtags."""
+        words  = re.split(r"(\s+)", text)
+        result = []
+        for w in words:
+            if re.match(r"https?://\S+", w) or w.startswith("#") or w.startswith("@"):
+                result.append(w)      # URL / hashtag / mention — keep as-is
+            else:
+                result.append(to_small_caps(w))
+        return "".join(result)
 
     def _tokens(self, category: str, meta: Dict, s: Dict) -> Dict:
         quality = s.get("quality") or cfg.DEFAULT_QUALITY
@@ -131,7 +180,6 @@ class FormatEngine:
         cleaned = []
         for line in lines:
             stripped = line.strip()
-            # Drop lines ending with » N/A  or  » ?  or  :  N/A
             if re.search(r"[»:]\s*(N/A|\?)\s*$", stripped):
                 continue
             cleaned.append(line)
@@ -141,10 +189,10 @@ class FormatEngine:
         return result.strip()
 
     def _hashtags(self, title: str, category: str, genres: str) -> str:
-        clean     = re.sub(r"[^\w\s]", "", title)
-        tag       = "#" + "_".join(clean.split()).title()
-        cat_tag   = {"movie": "#Movie", "tvshow": "#TVShow",
-                     "anime": "#Anime", "manhwa": "#Manhwa"}.get(category, "")
+        clean      = re.sub(r"[^\w\s]", "", title)
+        tag        = "#" + "_".join(clean.split()).title()
+        cat_tag    = {"movie": "#Movie", "tvshow": "#TVShow",
+                      "anime": "#Anime", "manhwa": "#Manhwa"}.get(category, "")
         genre_tags = [
             "#" + g.strip().replace(" ", "")
             for g in (genres or "").split(",")[:3] if g.strip()

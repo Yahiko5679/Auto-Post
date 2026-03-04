@@ -4,6 +4,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.db import CosmicBotz
+from routers.admin import check_mode, is_admin
 
 router = Router()
 
@@ -19,6 +20,15 @@ async def _ensure_user(message: Message):
 @router.message(Command("start"))
 async def cmd_start(message: Message):
     await _ensure_user(message)
+
+    # Ban check first
+    if await CosmicBotz.is_banned(message.from_user.id):
+        await message.answer("⛔ You are banned from using this bot.")
+        return
+
+    # Mode check — /start always shows, but we append a notice if restricted
+    allowed, reason = await check_mode(message.from_user.id)
+
     name = message.from_user.first_name or "there"
     kb   = InlineKeyboardBuilder()
     kb.button(text="🎬 Movie",    callback_data="eg_movie")
@@ -27,6 +37,15 @@ async def cmd_start(message: Message):
     kb.button(text="📖 Manhwa",   callback_data="eg_manhwa")
     kb.button(text="⚙️ Settings", callback_data="cfg_open")
     kb.adjust(2, 2, 1)
+
+    if not allowed:
+        # Show restricted message instead of full panel
+        await message.answer(
+            f"👋 <b>Hello, {name}!</b>\n\n{reason}",
+            reply_markup=None,
+        )
+        return
+
     await message.answer(
         f"👋 <b>Hello, {name}!</b>\n\n"
         "🤖 <b>CosmicBotz — AutoPost Generator</b>\n\n"
@@ -44,6 +63,16 @@ async def cmd_start(message: Message):
 @router.message(Command("help"))
 async def cmd_help(message: Message):
     await _ensure_user(message)
+
+    if await CosmicBotz.is_banned(message.from_user.id):
+        await message.answer("⛔ You are banned from using this bot.")
+        return
+
+    allowed, reason = await check_mode(message.from_user.id)
+    if not allowed:
+        await message.answer(reason)
+        return
+
     await message.answer(
         "📖 <b>CosmicBotz — Help</b>\n\n"
         "<b>Content:</b>\n"
@@ -55,8 +84,8 @@ async def cmd_help(message: Message):
         "/settings — Full settings panel\n"
         "/setwatermark — Set thumbnail watermark\n"
         "/setchannel — Link your channel\n"
-        "/setformat — Create caption template\n"
-        "/templates — Manage templates\n\n"
+        "/templates — Manage templates\n"
+        "/buttonsets — Manage button sets\n\n"
         "<b>Info:</b>\n"
         "/stats — Your usage stats"
     )
@@ -65,12 +94,20 @@ async def cmd_help(message: Message):
 @router.message(Command("stats"))
 async def cmd_stats(message: Message):
     await _ensure_user(message)
-    user = await CosmicBotz.get_user(message.from_user.id)
-    plan = "⭐ Premium" if user and user.get("is_premium") else "Free"
+
+    if await CosmicBotz.is_banned(message.from_user.id):
+        await message.answer("⛔ You are banned from using this bot.")
+        return
+
+    user  = await CosmicBotz.get_user(message.from_user.id)
+    plan  = "⭐ Premium" if user and user.get("is_premium") else "Free"
     posts = user.get("post_count", 0) if user else 0
+    today = str(__import__("datetime").date.today())
+    today_posts = user.get("daily_posts", {}).get(today, 0) if user else 0
     await message.answer(
         f"📊 <b>Your Stats</b>\n\n"
         f"Total Posts: <b>{posts}</b>\n"
+        f"Today:       <b>{today_posts}</b>\n"
         f"Account:     <b>{plan}</b>"
     )
 

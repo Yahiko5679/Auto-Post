@@ -17,7 +17,7 @@ from utils.helpers import (
     template_kb, add_button_start_kb, button_manage_kb, default_buttons_kb,
 )
 
-from routers.admin import is_admin
+from routers.admin import is_admin, check_mode 
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -192,6 +192,10 @@ async def _show_preview_from_message(msg: Message, user_id: int):
 # ── Search ────────────────────────────────────────────────────────────────────
 
 async def _search(message: Message, category: str):
+    allowed, reason = await check_mode(message.from_user.id)
+    if not allowed:
+        await message.answer(reason)
+        return
     query = extract_query(message.text)
     if not query:
         await message.answer(
@@ -233,6 +237,10 @@ async def cmd_category(message: Message):
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_select_(\d+)$"))
 async def cb_select(cb: CallbackQuery):
     await cb.answer()
+    allowed, reason = await check_mode(message.from_user.id)
+    if not allowed:
+        await message.answer(reason)
+        return
     parts      = cb.data.split("_select_")
     raw_prefix = parts[0]
     item_id    = int(parts[1])
@@ -948,11 +956,3 @@ async def handle_text_input(message: Message):
         )
 
 
-# ── Add this mode guard at the TOP of _search() and cb_select() ───────────────
-# (and any other user-facing entry points)
-
-    from routers.admin import check_mode
-    allowed, reason = await check_mode(message.from_user.id)
-    if not allowed:
-        await message.answer(reason)
-        return

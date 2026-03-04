@@ -167,5 +167,46 @@ class Database:
         await self._db().button_sets.delete_one({"user_id": user_id, "name": name})
 
 
+# ── Add these methods inside the Database class, after delete_button_set ──────
+
+    # ── Bot config (mode, maintenance message) ────────────────────────────────
+
+    async def get_bot_mode(self) -> str:
+        doc = await self._db().config.find_one({"_id": "bot"})
+        return doc.get("mode", "public") if doc else "public"
+
+    async def set_bot_mode(self, mode: str):
+        await self._db().config.update_one(
+            {"_id": "bot"},
+            {"$set": {"mode": mode, "mode_updated": datetime.utcnow()}},
+            upsert=True,
+        )
+
+    async def get_maintenance_message(self) -> str:
+        doc = await self._db().config.find_one({"_id": "bot"})
+        return doc.get("maintenance_message", "") if doc else ""
+
+    async def set_maintenance_message(self, text: str):
+        await self._db().config.update_one(
+            {"_id": "bot"},
+            {"$set": {"maintenance_message": text}},
+            upsert=True,
+        )
+
+    # ── Extra stats ───────────────────────────────────────────────────────────
+
+    async def total_premium_users(self) -> int:
+        return await self._db().users.count_documents({"is_premium": True})
+
+    async def total_banned_users(self) -> int:
+        return await self._db().users.count_documents({"is_banned": True})
+
+    async def active_users_today(self) -> int:
+        """Count users who posted at least once today."""
+        today = str(date.today())
+        return await self._db().users.count_documents(
+            {f"daily_posts.{today}": {"$gt": 0}}
+        )
+
 # ── Singleton ─────────────────────────────────────────────────────────────────
 CosmicBotz = Database()

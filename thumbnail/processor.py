@@ -70,20 +70,25 @@ def _wrap(text: str, font, draw, max_w: int) -> list:
 # ── Watermark ─────────────────────────────────────────────────────────────────
 
 def _draw_text_watermark(canvas: Image.Image, text: str) -> Image.Image:
-    """Clean plain text watermark — white text with subtle shadow, no box."""
+    """
+    Watermark — top-right dark pill box with white bold text.
+    Sits ABOVE the genre nav row so they never overlap.
+    """
     if not text:
         return canvas
     W, H  = canvas.size
-    font  = _font(26)
+    font  = _font(32)           # bigger font
     ov    = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     od    = ImageDraw.Draw(ov)
     bbox  = od.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = W - tw - 18
-    y = 18
-    # Subtle drop shadow
-    od.text((x + 2, y + 2), text, font=font, fill=(0, 0, 0, 160))
-    od.text((x,     y),     text, font=font, fill=(255, 255, 255, 230))
+    px, py = 20, 10
+    x = W - tw - px * 2 - 14
+    y = 10                      # fixed top-right, above genre row
+    # Dark pill background
+    od.rectangle([x, y, x + tw + px * 2, y + th + py * 2], fill=(0, 0, 0, 210))
+    # White bold text
+    od.text((x + px, y + py), text, font=font, fill=(255, 255, 255, 255))
     return Image.alpha_composite(canvas.convert("RGBA"), ov)
 
 
@@ -131,26 +136,28 @@ def _draw_logo_watermark(
 # ── Top nav bar ───────────────────────────────────────────────────────────────
 
 def _draw_top_nav(canvas: Image.Image, genres: str) -> Image.Image:
-    """Genre tags right-aligned in top nav bar — Action  Comedy  Adventure."""
+    """
+    Genre tags — LEFT aligned, below watermark row, like AOT reference.
+    Dot separator between items.
+    """
     W, H  = canvas.size
     ov    = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     od    = ImageDraw.Draw(ov)
-    items = [g.strip() for g in genres.split(",") if g.strip()][:4] if genres else []
+    items = [g.strip() for g in genres.split(",") if g.strip()][:5] if genres else []
     if not items:
         return canvas
-    font    = _font(24, bold=False)
-    sep     = "    "
-    sep_w   = int(od.textlength(sep, font=font))
-    widths  = [int(od.textlength(g, font=font)) for g in items]
-    total_w = sum(widths) + sep_w * (len(items) - 1)
-    x = W - 130 - total_w
-    y = 22
+    font  = _font(22, bold=False)
+    dot   = "  •  "
+    dot_w = int(od.textlength(dot, font=font))
+    x     = 58      # same left margin as title
+    y     = 108     # just above title_y=170, below watermark
     for i, g in enumerate(items):
-        od.text((x, y), g, font=font, fill=(255, 255, 255, 230))
-        x += widths[i]
+        gw = int(od.textlength(g, font=font))
+        od.text((x, y), g, font=font, fill=(210, 210, 210, 220))
+        x += gw
         if i < len(items) - 1:
-            od.text((x, y), sep, font=font, fill=(255, 255, 255, 100))
-            x += sep_w
+            od.text((x, y), dot, font=font, fill=(150, 150, 150, 160))
+            x += dot_w
     return Image.alpha_composite(canvas.convert("RGBA"), ov)
 
 
@@ -246,17 +253,11 @@ def _build_card(
 
     dl_label = "DOWNLOAD"
     dl_w     = int(draw.textlength(dl_label, font=btn_font)) + 52
-    draw.rectangle([left_x, y, left_x + dl_w, y + btn_h], outline=(200, 200, 200, 180), width=2)
-    # Diagonal cut on right side
-    cut_pts = [
-        (left_x + dl_w - 14, y),
-        (left_x + dl_w + 2,  y),
-        (left_x + dl_w + 2,  y + btn_h),
-        (left_x + dl_w - 14, y + btn_h),
-    ]
-    draw.polygon(cut_pts, fill=(12, 14, 20, 255))
-    dl_tx = left_x + (dl_w - int(draw.textlength(dl_label, font=btn_font))) // 2 - 4
-    draw.text((dl_tx, y + 14), dl_label, font=btn_font, fill=(220, 220, 220, 240))
+    # Solid dark fill so button stands out on any background
+    draw.rectangle([left_x, y, left_x + dl_w, y + btn_h], fill=(20, 20, 28, 230))
+    draw.rectangle([left_x, y, left_x + dl_w, y + btn_h], outline=(255, 255, 255, 220), width=2)
+    dl_tx = left_x + (dl_w - int(draw.textlength(dl_label, font=btn_font))) // 2
+    draw.text((dl_tx, y + 14), dl_label, font=btn_font, fill=(255, 255, 255, 255))
 
     wn_label = "WATCH NOW"
     wn_x     = left_x + dl_w

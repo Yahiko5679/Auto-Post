@@ -1,6 +1,7 @@
 import asyncio
 import io
 import logging
+import aiohttp
 from datetime import datetime, timedelta
 from aiogram import Router, F
 from aiogram.filters import Command
@@ -57,8 +58,9 @@ def admin_kb():
     kb.button(text="📋 Logs",       callback_data="adm_log")
     kb.button(text="👥 Users",      callback_data="adm_users")
     kb.button(text="🔧 Maintenance",callback_data="adm_maintenance")
+    kb.button(text="🔄 Update Bot", callback_data="adm_update")
     kb.button(text="❌ Close",       callback_data="adm_close")
-    kb.adjust(2, 2, 2, 1)
+    kb.adjust(2, 2, 2, 1, 1)
     return kb.as_markup()
 
 
@@ -303,6 +305,46 @@ async def cmd_maintenance(message: Message):
     )
 
 
+@router.message(Command("update"))
+async def cmd_update(message: Message):
+    """Trigger a redeploy from latest Git commit on Render."""
+    if not is_admin(message.from_user.id):
+        return
+    await _trigger_render_deploy(message)
+
+
+# ── Render deploy helper ──────────────────────────────────────────────────────
+
+async def _trigger_render_deploy(target: Message):
+    """POST to Render deploy hook and report result to target message."""
+    hook = getattr(cfg, "RENDER_DEPLOY_HOOK", "")
+    if not hook:
+        await target.answer(
+            "❌ <b>RENDER_DEPLOY_HOOK</b> is not set.\n\n"
+            "Add it to your <code>.env</code> and <code>config.py</code>:\n"
+            "<code>RENDER_DEPLOY_HOOK=https://api.render.com/deploy/srv-xxx?key=yyy</code>"
+        )
+        return
+    msg = await target.answer("🔄 <b>Triggering deploy on Render...</b>")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(hook, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                if resp.status in (200, 201):
+                    await msg.edit_text(
+                        "✅ <b>Deploy triggered!</b>\n\n"
+                        "⏳ Render is pulling the latest commit and restarting.\n"
+                        "<i>The bot will go offline briefly during the restart.</i>"
+                    )
+                else:
+                    body = await resp.text()
+                    await msg.edit_text(
+                        f"⚠️ <b>Render responded with HTTP {resp.status}</b>\n\n"
+                        f"<code>{body[:300]}</code>"
+                    )
+    except aiohttp.ClientError as e:
+        await msg.edit_text(f"❌ <b>Request failed:</b> <code>{e}</code>")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _send_stats(target: Message):
@@ -543,3 +585,8 @@ async def adm_callback(cb: CallbackQuery):
             "🔧 Send the <b>maintenance message</b> users will see:\n\n"
             "<i>Example: We're upgrading the bot, back in 30 mins! 🚀</i>"
         )
+
+    # ── Render deploy ─────────────────────────────────────────────────────────
+
+    elif data == "adm_update":
+        await _trigger_render_deploy(cb.message)

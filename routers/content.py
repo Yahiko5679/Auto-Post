@@ -503,6 +503,9 @@ async def cb_btn_start(cb: CallbackQuery):
             await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
         except Exception:
             pass
+
+
+@router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_btn_add$"))
 async def cb_btn_add(cb: CallbackQuery):
     await cb.answer()
     state = await fsm.get(cb.from_user.id)

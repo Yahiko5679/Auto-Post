@@ -264,9 +264,9 @@ async def cmd_addpremium(message: Message):
     await message.answer(f"⭐ <code>{uid}</code> {sc('upgraded to Premium.')}")
     try:
         await message.bot.send_message(
-            uid,
-            f"🎉 <b>{sc(\"You've been upgraded to ⭐ Premium!\")}</b>\n{sc('Enjoy unlimited access.')}",
-        )
+    uid,
+    f"🎉 <b>{sc('You\\'ve been upgraded to ⭐ Premium!')}</b>\n{sc('Enjoy unlimited access.')}",
+)
     except Exception:
         pass
 

@@ -108,7 +108,7 @@ def _position_kb(prefix: str, current_buttons: list) -> InlineKeyboardMarkup:
         # directly above them already has at least one button.
         if count == 0 and r > 0 and (r - 1) not in rows:
             continue
-        label = f"➕ Row {r + 1}" + (f"  [{count}/{MAX_COLS}]" if count > 0 else "  [empty]")
+        label = f"➕ {sc('Row')} {r + 1}" + (f"  [{count}/{MAX_COLS}]" if count > 0 else f"  [{sc('empty')}]")
         kb.button(text=label, callback_data=f"{prefix}_btnpos_{r}")
     kb.button(text="❌ Cancel", callback_data=f"{prefix}_btn_start")
     kb.adjust(1)
@@ -909,7 +909,7 @@ async def handle_text_input(message: Message):
         for b in btns:
             rows.setdefault(b.get("row", 0), []).append(b["text"])
         preview = (
-            "\n".join(f"  Row {r+1}: " + "  |  ".join(rows[r]) for r in sorted(rows))
+            "\n".join(f"  {sc('Row')} {r+1}: " + "  |  ".join(rows[r]) for r in sorted(rows))
             or f"  <i>{sc('first button')}</i>"
         )
         kb = InlineKeyboardBuilder()
@@ -919,7 +919,7 @@ async def handle_text_input(message: Message):
                 continue  # row full
             if len(existing) == 0 and r > 0 and (r - 1) not in rows:
                 continue  # would create a gap
-            label = f"Row {r+1}" + (f"  [{len(existing)} here]" if existing else "  [empty]")
+            label = f"{sc('Row')} {r+1}" + (f"  [{len(existing)} {sc('here')}]" if existing else f"  [{sc('empty')}]")
             kb.button(text=label, callback_data=f"bset_row:{r}")
         kb.adjust(2)
         await message.answer(

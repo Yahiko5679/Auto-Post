@@ -65,7 +65,9 @@ def build_post_keyboard(buttons: list) -> InlineKeyboardMarkup | None:
         return None
     kb   = InlineKeyboardBuilder()
     rows: dict[int, int] = {}
-    for btn in buttons:
+    # Sort by row first — buttons must be fed to the builder in row order
+    # so that adjust() assigns them to the correct rows.
+    for btn in sorted(buttons, key=lambda b: b.get("row", 0)):
         if btn.get("url"):
             kb.button(text=btn["text"], url=btn["url"])
         elif btn.get("callback_data"):
@@ -99,11 +101,15 @@ def _position_kb(prefix: str, current_buttons: list) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for r in range(MAX_ROWS):
         count = rows.get(r, 0)
-        if count < MAX_COLS:
-            if count == 0 and r > 0 and (r - 1) not in rows:
-                continue
-            label = f"➕ Row {r + 1}" + (f"  [{count}/{MAX_COLS}]" if count > 0 else "  [empty]")
-            kb.button(text=label, callback_data=f"{prefix}_btnpos_{r}")
+        if count >= MAX_COLS:
+            continue  # row is full, skip
+        # Only block a row if it would create a gap ABOVE row 1.
+        # Row 0 is always available. Rows 2+ are only shown if the row
+        # directly above them already has at least one button.
+        if count == 0 and r > 0 and (r - 1) not in rows:
+            continue
+        label = f"➕ Row {r + 1}" + (f"  [{count}/{MAX_COLS}]" if count > 0 else "  [empty]")
+        kb.button(text=label, callback_data=f"{prefix}_btnpos_{r}")
     kb.button(text="❌ Cancel", callback_data=f"{prefix}_btn_start")
     kb.adjust(1)
     return kb.as_markup()
@@ -246,7 +252,10 @@ async def cb_select(cb: CallbackQuery):
     await cb.answer()
     allowed, reason = await check_mode(cb.from_user.id)
     if not allowed:
-        await cb.message.answer(reason)
+        try:
+            await cb.message.edit_text(reason)
+        except Exception:
+            await cb.message.answer(reason)
         return
     parts      = cb.data.split("_select_")
     raw_prefix = parts[0]
@@ -398,10 +407,19 @@ async def cb_change_tpl(cb: CallbackQuery):
         return
     templates = await CosmicBotz.list_user_templates(cb.from_user.id)
     prefix    = CAT_TO_PREFIX[state.get("category", "movie")]
-    await cb.message.edit_caption(
-        caption=f"📄 <b>{sc('select a template:')}</b>",
-        reply_markup=template_kb(templates, prefix),
-    )
+    try:
+        await cb.message.edit_caption(
+            caption=f"📄 <b>{sc('select a template:')}</b>",
+            reply_markup=template_kb(templates, prefix),
+        )
+    except Exception:
+        try:
+            await cb.message.edit_text(
+                f"📄 <b>{sc('select a template:')}</b>",
+                reply_markup=template_kb(templates, prefix),
+            )
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_tpl_(.+)$"))
@@ -481,10 +499,10 @@ async def cb_btn_start(cb: CallbackQuery):
     try:
         await cb.message.edit_caption(caption=_btn_manager_text(buttons), reply_markup=kb)
     except Exception:
-        await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
-
-
-@router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_btn_add$"))
+        try:
+            await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
+        except Exception:
+            pass
 async def cb_btn_add(cb: CallbackQuery):
     await cb.answer()
     state = await fsm.get(cb.from_user.id)
@@ -532,7 +550,10 @@ async def cb_btn_delete(cb: CallbackQuery):
     try:
         await cb.message.edit_caption(caption=_btn_manager_text(buttons), reply_markup=kb)
     except Exception:
-        await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
+        try:
+            await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_btn_defaults$"))
@@ -574,7 +595,10 @@ async def cb_btn_defaults(cb: CallbackQuery):
     try:
         await cb.message.edit_caption(caption=text, reply_markup=kb)
     except Exception:
-        await cb.message.edit_text(text, reply_markup=kb)
+        try:
+            await cb.message.edit_text(text, reply_markup=kb)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_dflbtn_(.+)$"))
@@ -618,7 +642,10 @@ async def cb_apply_default_buttons(cb: CallbackQuery):
     try:
         await cb.message.edit_caption(caption=_btn_manager_text(buttons), reply_markup=kb)
     except Exception:
-        await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
+        try:
+            await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_btn_loadset$"))
@@ -649,7 +676,10 @@ async def cb_btn_loadset(cb: CallbackQuery):
     try:
         await cb.message.edit_caption(caption=caption, reply_markup=kb.as_markup())
     except Exception:
-        await cb.message.edit_text(caption, reply_markup=kb.as_markup())
+        try:
+            await cb.message.edit_text(caption, reply_markup=kb.as_markup())
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_btn_applysets_(\d+)$"))
@@ -673,7 +703,10 @@ async def cb_btn_applyset(cb: CallbackQuery):
     try:
         await cb.message.edit_caption(caption=_btn_manager_text(buttons), reply_markup=kb)
     except Exception:
-        await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
+        try:
+            await cb.message.edit_text(_btn_manager_text(buttons), reply_markup=kb)
+        except Exception:
+            pass
 
 
 @router.callback_query(F.data.regexp(r"^(movie|tv|anime|manhwa)_btnpos_(\d+)$"))
@@ -882,9 +915,12 @@ async def handle_text_input(message: Message):
         kb = InlineKeyboardBuilder()
         for r in range(4):
             existing = rows.get(r, [])
-            if len(existing) < 4:
-                label = f"Row {r+1}" + (f"  [{len(existing)} here]" if existing else "  [empty]")
-                kb.button(text=label, callback_data=f"bset_row:{r}")
+            if len(existing) >= 4:
+                continue  # row full
+            if len(existing) == 0 and r > 0 and (r - 1) not in rows:
+                continue  # would create a gap
+            label = f"Row {r+1}" + (f"  [{len(existing)} here]" if existing else "  [empty]")
+            kb.button(text=label, callback_data=f"bset_row:{r}")
         kb.adjust(2)
         await message.answer(
             f"📐 <b>{sc('which row?')}</b>\n\n<b>{sc('current:')}</b>\n{preview}",

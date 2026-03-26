@@ -1,9 +1,5 @@
-import os
-import sys
-_ROOT = os.path.dirname(os.path.abspath(__file__))
-os.chdir(_ROOT)
-sys.path.insert(0, _ROOT)
-
+import asyncio
 from bot import main
 
-main()
+if __name__ == "__main__":
+    asyncio.run(main())

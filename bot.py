@@ -1,5 +1,6 @@
 import asyncio
 import logging
+
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher
@@ -10,14 +11,13 @@ from config import BOT_TOKEN, PORT, ADMIN_IDS
 from routers import get_all_routers
 from utils.font_loader import ensure_fonts
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
 logger = logging.getLogger("bot")
 
+# Global flag to prevent multiple start messages
+_bot_started = False
 
-# ── Health server (Render uptime) ─────────────────────────────────────────────
+
+# ── Health Server (Render Uptime) ───────────────────────────────────────────
 async def _handle_ping(request):
     return web.Response(text="OK")
 
@@ -43,8 +43,20 @@ async def start_health_server(port: int):
     logger.info(f"🌐 Health server running on port {port}")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-async def main():
+# ── Graceful Shutdown ───────────────────────────────────────────────────────
+async def shutdown(bot: Bot, dp: Dispatcher):
+    logger.info("🛑 Cleaning up bot resources...")
+    try:
+        await bot.session.close()
+    except Exception:
+        pass
+    logger.info("✅ Bot resources closed.")
+
+
+# ── Main Bot Runner ─────────────────────────────────────────────────────────
+async def run_bot():
+    global _bot_started
+
     ensure_fonts()
 
     bot = Bot(
@@ -54,37 +66,52 @@ async def main():
 
     dp = Dispatcher()
 
+    # Include all routers
     for router in get_all_routers():
         dp.include_router(router)
 
-    logger.info("✅ Routers loaded")
+    logger.info("✅ All routers loaded successfully")
 
-    # ✅ Remove webhook (important when switching modes)
+    # Clean webhook + drop pending updates
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        await asyncio.sleep(1)
+        logger.info("✅ Webhook deleted and pending updates dropped")
+        await asyncio.sleep(2)
     except Exception as e:
         logger.warning(f"Webhook cleanup failed: {e}")
 
-    # ✅ Start health server (only once)
+    # Start health server
     await start_health_server(PORT)
 
-    # ✅ Delay to avoid instance overlap (Render fix)
-    logger.info("⏳ Waiting before polling...")
-    await asyncio.sleep(8)
+    # Important delay to prevent instance overlap on Render
+    logger.info("⏳ Waiting before polling to avoid Telegram conflicts...")
+    await asyncio.sleep(12)
 
-    # ✅ Notify admin once
-    for admin_id in ADMIN_IDS:
-        try:
-            await bot.send_message(
-                admin_id,
-                "<b><blockquote>🤖 CosmicBotz Started </blockquote></b>"
-            )
-        except Exception:
-            pass
+    try:
+        logger.info("🚀 Starting long polling...")
 
-    #  Start polling (NO LOOP, NO GATHER)
-    logger.info("🚀 Polling started")
-    await dp.start_polling(bot, skip_updates=True)
+        # Send start notification only once
+        if not _bot_started:
+            for admin_id in ADMIN_IDS:
+                try:
+                    await bot.send_message(
+                        admin_id,
+                        "<b><blockquote>🤖 CosmicBotz Started Successfully</blockquote></b>"
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not notify admin {admin_id}: {e}")
+            _bot_started = True
 
+        # Start polling
+        await dp.start_polling(
+            bot,
+            skip_updates=True,
+            allowed_updates=dp.resolve_used_update_types(),
+        )
 
+    except asyncio.CancelledError:
+        logger.info("Polling was cancelled.")
+    except Exception as e:
+        logger.error(f"Polling stopped with error: {e}", exc_info=True)
+    finally:
+        await shutdown(bot, dp)

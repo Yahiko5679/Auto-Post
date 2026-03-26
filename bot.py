@@ -1,117 +1,76 @@
+import os
+import sys
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+os.chdir(_ROOT)
+sys.path.insert(0, _ROOT)
+
 import asyncio
 import logging
-
 from aiohttp import web
-
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-from config import BOT_TOKEN, PORT, ADMIN_IDS
+from config import BOT_TOKEN, ADMIN_IDS, PORT, WEBHOOK_URL
 from routers import get_all_routers
-from utils.font_loader import ensure_fonts
 
-logger = logging.getLogger("bot")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+)
+LOGGER = logging.getLogger(__name__)
 
-# Global flag to prevent multiple start messages
-_bot_started = False
+WEBHOOK_PATH = "/webhook"
 
-
-# ── Health Server (Render Uptime) ───────────────────────────────────────────
-async def _handle_ping(request):
-    return web.Response(text="OK")
-
-
-async def _handle_health(request):
-    return web.Response(
-        content_type="application/json",
-        text='{"status":"ok","bot":"CosmicBotz"}'
-    )
+bot = Bot(
+    token=BOT_TOKEN,
+    default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+)
+dp = Dispatcher()
 
 
-async def start_health_server(port: int):
-    app = web.Application()
-    app.router.add_get("/", _handle_ping)
-    app.router.add_get("/health", _handle_health)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-
-    logger.info(f"🌐 Health server running on port {port}")
-
-
-# ── Graceful Shutdown ───────────────────────────────────────────────────────
-async def shutdown(bot: Bot, dp: Dispatcher):
-    logger.info("🛑 Cleaning up bot resources...")
-    try:
-        await bot.session.close()
-    except Exception:
-        pass
-    logger.info("✅ Bot resources closed.")
-
-
-# ── Main Bot Runner ─────────────────────────────────────────────────────────
-async def run_bot():
-    global _bot_started
-
-    ensure_fonts()
-
-    bot = Bot(
-        token=BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
-
-    dp = Dispatcher()
-
-    # Include all routers
+async def on_startup():
+    # Register all routers
     for router in get_all_routers():
         dp.include_router(router)
+    LOGGER.info(f"✅ Loaded {len(dp.routers)} routers")
 
-    logger.info("✅ All routers loaded successfully")
+    # Notify admins
+    for admin_id in ADMIN_IDS:
+        try:
+            await bot.send_message(
+                chat_id=admin_id,
+                text="<b><blockquote>🤖 CosmicBotz Started ✅</blockquote></b>",
+            )
+        except Exception as e:
+            LOGGER.warning(f"Could not notify admin {admin_id}: {e}")
 
-    # Clean webhook + drop pending updates
-    try:
-        await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Webhook deleted and pending updates dropped")
-        await asyncio.sleep(2)
-    except Exception as e:
-        logger.warning(f"Webhook cleanup failed: {e}")
+    # Set webhook
+    webhook = f"{WEBHOOK_URL.rstrip('/')}{WEBHOOK_PATH}"
+    await bot.set_webhook(url=webhook, drop_pending_updates=True)
+    LOGGER.info(f"✅ Webhook set → {webhook}")
 
-    # Start health server
-    await start_health_server(PORT)
 
-    # Important delay to prevent instance overlap on Render
-    logger.info("⏳ Waiting before polling to avoid Telegram conflicts...")
-    await asyncio.sleep(12)
+async def on_shutdown():
+    await bot.delete_webhook()
+    LOGGER.info("⛔ Webhook deleted.")
 
-    try:
-        logger.info("🚀 Starting long polling...")
 
-        # Send start notification only once
-        if not _bot_started:
-            for admin_id in ADMIN_IDS:
-                try:
-                    await bot.send_message(
-                        admin_id,
-                        "<b><blockquote>🤖 CosmicBotz Started Successfully</blockquote></b>"
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not notify admin {admin_id}: {e}")
-            _bot_started = True
+def main():
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
 
-        # Start polling
-        await dp.start_polling(
-            bot,
-            skip_updates=True,
-            allowed_updates=dp.resolve_used_update_types(),
-        )
+    app = web.Application()
+    app.router.add_get("/", lambda r: web.Response(text="CosmicBotz Running!"))
+    app.router.add_get("/health", lambda r: web.Response(text="OK"))
 
-    except asyncio.CancelledError:
-        logger.info("Polling was cancelled.")
-    except Exception as e:
-        logger.error(f"Polling stopped with error: {e}", exc_info=True)
-    finally:
-        await shutdown(bot, dp)
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
+
+    LOGGER.info(f"🌐 Starting on port {PORT}")
+    web.run_app(app, host="0.0.0.0", port=PORT)
+
+
+if __name__ == "__main__":
+    main()
